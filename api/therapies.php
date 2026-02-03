@@ -54,6 +54,76 @@ function executeQueryWithTypes(PDO $pdo, string $sql, array $params = []) {
     return $stmt;
 }
 
+function upsertInitialFollowupChecklist(PDO $pdo, $therapy_id, $pharmacy_id, $userId, $primary_condition, $condition_survey) {
+    ensureTherapyChecklist($pdo, $therapy_id, $pharmacy_id, $primary_condition);
+
+    $initialFollowups = db_fetch_all(
+        "SELECT id FROM jta_therapy_followups WHERE therapy_id = ? AND pharmacy_id = ? AND check_type = 'initial' ORDER BY id ASC",
+        [$therapy_id, $pharmacy_id]
+    );
+
+    if (!empty($initialFollowups)) {
+        $initialCheckId = $initialFollowups[0]['id'];
+        if (count($initialFollowups) > 1) {
+            $extraIds = array_slice(array_column($initialFollowups, 'id'), 1);
+            $placeholders = implode(',', array_fill(0, count($extraIds), '?'));
+            executeQueryWithTypes(
+                $pdo,
+                "DELETE FROM jta_therapy_checklist_answers WHERE followup_id IN ($placeholders)",
+                $extraIds
+            );
+            executeQueryWithTypes(
+                $pdo,
+                "DELETE FROM jta_therapy_followups WHERE id IN ($placeholders)",
+                $extraIds
+            );
+        }
+    } else {
+        executeQueryWithTypes(
+            $pdo,
+            "INSERT INTO jta_therapy_followups (therapy_id, pharmacy_id, created_by, entry_type, check_type, follow_up_date) VALUES (?,?,?,?,?,?)",
+            [
+                $therapy_id,
+                $pharmacy_id,
+                $userId,
+                'check',
+                'initial',
+                null
+            ]
+        );
+        $initialCheckId = $pdo->lastInsertId();
+    }
+
+    executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_checklist_answers WHERE followup_id = ?", [$initialCheckId]);
+
+    $answersMap = $condition_survey && isset($condition_survey['answers']) && is_array($condition_survey['answers'])
+        ? $condition_survey['answers']
+        : [];
+    $questionRows = db_fetch_all(
+        "SELECT id, question_key FROM jta_therapy_checklist_questions WHERE therapy_id = ? ORDER BY sort_order ASC, id ASC",
+        [$therapy_id]
+    );
+    foreach ($questionRows as $row) {
+        $answerValue = null;
+        $key = $row['question_key'] ?? null;
+        if ($key && array_key_exists($key, $answersMap)) {
+            $answerValue = $answersMap[$key];
+            if (is_bool($answerValue)) {
+                $answerValue = $answerValue ? 'true' : 'false';
+            }
+        }
+        executeQueryWithTypes(
+            $pdo,
+            "INSERT INTO jta_therapy_checklist_answers (followup_id, question_id, answer_value) VALUES (?,?,?)",
+            [
+                $initialCheckId,
+                $row['id'],
+                $answerValue
+            ]
+        );
+    }
+}
+
 function fetchPatientForPharmacy($patient_id, $pharmacy_id) {
     if (!$patient_id || !$pharmacy_id) {
         return null;
@@ -124,7 +194,7 @@ switch ($method) {
 
         $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
-        $sql = "SELECT t.*, p.first_name, p.last_name, p.codice_fiscale, p.birth_date, p.phone, p.email, p.notes,
+        $sql = "SELECT t.*, p.first_name, p.last_name, p.codice_fiscale, p.birth_date, p.gender, p.phone, p.email, p.notes,
                        ph.nice_name AS pharmacy_name,
                        tcc.primary_condition, tcc.notes_initial, tcc.follow_up_date, tcc.risk_score,
                        tcc.flags, tcc.general_anamnesis, tcc.detailed_intake, tcc.adherence_base,
@@ -239,13 +309,14 @@ switch ($method) {
             $patient_id = $patient['id'] ?? null;
             if (!$patient_id) {
                 executeQueryWithTypes($pdo, 
-                    "INSERT INTO jta_patients (pharmacy_id, first_name, last_name, birth_date, codice_fiscale, phone, email, notes) VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO jta_patients (pharmacy_id, first_name, last_name, birth_date, codice_fiscale, gender, phone, email, notes) VALUES (?,?,?,?,?,?,?,?,?)",
                     [
                         $pharmacy_id,
                         $patient['first_name'],
                         $patient['last_name'],
                         $patient['birth_date'] ?? null,
                         $patient['codice_fiscale'] ?? null,
+                        $patient['gender'] ?? null,
                         $patient['phone'] ?? null,
                         $patient['email'] ?? null,
                         $patient['notes'] ?? null
@@ -260,12 +331,13 @@ switch ($method) {
                     respond(false, null, 'Paziente non trovato per la farmacia', 404);
                 }
                 executeQueryWithTypes($pdo, 
-                    "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
+                    "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
                     [
                         $patient['first_name'],
                         $patient['last_name'],
                         $patient['birth_date'] ?? null,
                         $patient['codice_fiscale'] ?? null,
+                        $patient['gender'] ?? null,
                         $patient['phone'] ?? null,
                         $patient['email'] ?? null,
                         $patient['notes'] ?? null,
@@ -359,49 +431,8 @@ switch ($method) {
                 );
             }
 
-            ensureTherapyChecklist($pdo, $therapy_id, $pharmacy_id, $primary_condition);
-
             $userId = $_SESSION['user_id'] ?? null;
-            executeQueryWithTypes(
-                $pdo,
-                "INSERT INTO jta_therapy_followups (therapy_id, pharmacy_id, created_by, entry_type, check_type, follow_up_date) VALUES (?,?,?,?,?,?)",
-                [
-                    $therapy_id,
-                    $pharmacy_id,
-                    $userId,
-                    'check',
-                    'initial',
-                    null
-                ]
-            );
-            $initialCheckId = $pdo->lastInsertId();
-
-            $answersMap = $condition_survey && isset($condition_survey['answers']) && is_array($condition_survey['answers'])
-                ? $condition_survey['answers']
-                : [];
-            $questionRows = db_fetch_all(
-                "SELECT id, question_key FROM jta_therapy_checklist_questions WHERE therapy_id = ? ORDER BY sort_order ASC, id ASC",
-                [$therapy_id]
-            );
-            foreach ($questionRows as $row) {
-                $answerValue = null;
-                $key = $row['question_key'] ?? null;
-                if ($key && array_key_exists($key, $answersMap)) {
-                    $answerValue = $answersMap[$key];
-                    if (is_bool($answerValue)) {
-                        $answerValue = $answerValue ? 'true' : 'false';
-                    }
-                }
-                executeQueryWithTypes(
-                    $pdo,
-                    "INSERT INTO jta_therapy_checklist_answers (followup_id, question_id, answer_value) VALUES (?,?,?)",
-                    [
-                        $initialCheckId,
-                        $row['id'],
-                        $answerValue
-                    ]
-                );
-            }
+            upsertInitialFollowupChecklist($pdo, $therapy_id, $pharmacy_id, $userId, $primary_condition, $condition_survey);
 
             if ($consent) {
                 $consentSignerName = $consent['signer_name'] ?? '';
@@ -482,12 +513,13 @@ switch ($method) {
                     respond(false, null, 'Paziente non trovato per la farmacia', 404);
                 }
                 executeQueryWithTypes($pdo, 
-                    "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
+                    "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
                     [
                         $patient['first_name'] ?? '',
                         $patient['last_name'] ?? '',
                         $patient['birth_date'] ?? null,
                         $patient['codice_fiscale'] ?? null,
+                        $patient['gender'] ?? null,
                         $patient['phone'] ?? null,
                         $patient['email'] ?? null,
                         $patient['notes'] ?? null,
@@ -615,6 +647,11 @@ switch ($method) {
                         $condition_survey['compiled_at'] ?? date('Y-m-d H:i:s')
                     ]
                 );
+            }
+
+            if ($condition_survey) {
+                $userId = $_SESSION['user_id'] ?? null;
+                upsertInitialFollowupChecklist($pdo, $therapy_id, $pharmacy_id, $userId, $primary_condition, $condition_survey);
             }
 
             executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_consents WHERE therapy_id = ?", [$therapy_id]);

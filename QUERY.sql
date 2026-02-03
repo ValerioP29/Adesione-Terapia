@@ -1,4 +1,28 @@
 -- ----------------------------------------------------------
+-- jta_patients (DB reale)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `jta_patients` (
+  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
+  `pharmacy_id` int UNSIGNED DEFAULT NULL,
+  `first_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `last_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `birth_date` date DEFAULT NULL,
+  `codice_fiscale` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `gender` varchar(16) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `phone` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `email` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_patients_pharmacy` (`pharmacy_id`),
+  KEY `idx_patients_name` (`last_name`,`first_name`),
+  KEY `idx_patients_cf` (`codice_fiscale`),
+  CONSTRAINT `fk_patients_pharmacy`
+    FOREIGN KEY (`pharmacy_id`) REFERENCES `jta_pharmas` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
 -- jta_assistants (DB reale)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `jta_assistants` (

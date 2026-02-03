@@ -501,6 +501,18 @@ function getDefaultWizardState() {
     };
 }
 
+function shouldUseDraftForEdit(draft, serverUpdatedAt) {
+    if (!draft?.state || !draft?.updated_at || !serverUpdatedAt) {
+        return false;
+    }
+    const draftUpdatedAt = Date.parse(draft.updated_at);
+    const serverUpdated = Date.parse(serverUpdatedAt);
+    if (!Number.isFinite(draftUpdatedAt) || !Number.isFinite(serverUpdated)) {
+        return false;
+    }
+    return draftUpdatedAt > serverUpdated;
+}
+
 function openTherapyWizard(therapyId = null) {
     initWizard(therapyId);
 }
@@ -509,19 +521,30 @@ async function initWizard(therapyId = null) {
     currentTherapyId = therapyId;
     const defaultState = getDefaultWizardState();
     const draft = loadWizardDraft(therapyId);
-    if (draft?.state) {
+    therapyWizardState = defaultState;
+    currentWizardStep = 1;
+
+    buildWizardModalShell();
+    showWizardModal();
+
+    if (therapyId) {
+        const serverPayload = await loadTherapyForEdit(therapyId);
+        const serverState = serverPayload?.state
+            ? mergeWizardState(defaultState, serverPayload.state)
+            : defaultState;
+        if (shouldUseDraftForEdit(draft, serverPayload?.updated_at)) {
+            therapyWizardState = mergeWizardState(serverState, draft.state);
+            currentWizardStep = normalizeWizardStep(draft.step);
+        } else {
+            therapyWizardState = serverState;
+            currentWizardStep = 1;
+        }
+    } else if (draft?.state) {
         therapyWizardState = mergeWizardState(defaultState, draft.state);
         currentWizardStep = normalizeWizardStep(draft.step);
     } else {
         therapyWizardState = defaultState;
         currentWizardStep = 1;
-    }
-
-    buildWizardModalShell();
-    showWizardModal();
-
-    if (therapyId && !draft?.state) {
-        await loadTherapyForEdit(therapyId);
     }
 
     renderCurrentStep();
@@ -619,37 +642,39 @@ async function loadTherapyForEdit(therapyId) {
             const defaultConsent = getDefaultWizardState().consent || {};
             const defaultSurvey = getDefaultWizardState().condition_survey || {};
             const existingPatient = therapyWizardState.patient || {};
-            therapyWizardState.patient = {
+            const mappedState = {};
+            mappedState.patient = {
                 id: t.patient_id,
                 first_name: t.first_name,
                 last_name: t.last_name,
                 birth_date: t.birth_date ?? existingPatient.birth_date ?? '',
                 codice_fiscale: t.codice_fiscale || '',
+                gender: t.gender ?? existingPatient.gender ?? '',
                 phone: t.phone ?? existingPatient.phone ?? '',
                 email: t.email ?? existingPatient.email ?? '',
                 notes: t.notes ?? existingPatient.notes ?? ''
             };
             if (t.primary_condition) {
-                therapyWizardState.primary_condition = t.primary_condition;
+                mappedState.primary_condition = t.primary_condition;
             }
-            therapyWizardState.initial_notes = t.therapy_description || null;
-            therapyWizardState.notes_initial = t.notes_initial || therapyWizardState.notes_initial;
-            therapyWizardState.follow_up_date = t.follow_up_date || null;
-            therapyWizardState.risk_score = t.risk_score ?? therapyWizardState.risk_score;
+            mappedState.initial_notes = t.therapy_description || null;
+            mappedState.notes_initial = t.notes_initial ?? null;
+            mappedState.follow_up_date = t.follow_up_date || null;
+            mappedState.risk_score = t.risk_score ?? null;
             if (t.flags !== null && t.flags !== undefined) {
-                therapyWizardState.flags = t.flags;
+                mappedState.flags = t.flags;
             }
             if (t.general_anamnesis !== null && t.general_anamnesis !== undefined) {
-                therapyWizardState.general_anamnesis = t.general_anamnesis;
+                mappedState.general_anamnesis = t.general_anamnesis;
             }
             if (t.detailed_intake !== null && t.detailed_intake !== undefined) {
-                therapyWizardState.detailed_intake = t.detailed_intake;
+                mappedState.detailed_intake = t.detailed_intake;
             }
             if (t.adherence_base !== null && t.adherence_base !== undefined) {
-                therapyWizardState.adherence_base = t.adherence_base;
+                mappedState.adherence_base = t.adherence_base;
             }
             if (t.consent !== null && t.consent !== undefined) {
-                therapyWizardState.consent = {
+                mappedState.consent = {
                     ...defaultConsent,
                     ...t.consent,
                     scopes: {
@@ -663,7 +688,7 @@ async function loadTherapyForEdit(therapyId) {
                 };
             }
             if (t.condition_survey) {
-                therapyWizardState.condition_survey = {
+                mappedState.condition_survey = {
                     ...defaultSurvey,
                     ...t.condition_survey,
                     answers: {
@@ -672,23 +697,27 @@ async function loadTherapyForEdit(therapyId) {
                     }
                 };
             }
-            if (!therapyWizardState.condition_survey?.condition_type && therapyWizardState.primary_condition) {
-                therapyWizardState.condition_survey.condition_type = therapyWizardState.primary_condition;
+            if (!mappedState.condition_survey?.condition_type && mappedState.primary_condition) {
+                mappedState.condition_survey.condition_type = mappedState.primary_condition;
             }
             if (t.doctor_info !== null && t.doctor_info !== undefined) {
-                therapyWizardState.doctor_info = t.doctor_info;
+                mappedState.doctor_info = t.doctor_info;
             }
             if (t.biometric_info !== null && t.biometric_info !== undefined) {
-                therapyWizardState.biometric_info = t.biometric_info;
+                mappedState.biometric_info = t.biometric_info;
             }
             if (Array.isArray(t.therapy_assistants)) {
-                therapyWizardState.therapy_assistants = t.therapy_assistants;
+                mappedState.therapy_assistants = t.therapy_assistants;
             }
-            persistWizardDraft({ immediate: true, collectCurrent: false });
+            return {
+                state: mappedState,
+                updated_at: t.updated_at || t.created_at || null
+            };
         }
     } catch (error) {
         console.error('Errore caricamento terapia', error);
     }
+    return null;
 }
 
 function renderCurrentStep() {
@@ -880,6 +909,7 @@ function renderStep1() {
                         <option value="">Seleziona</option>
                         <option value="M" ${patient.gender === 'M' ? 'selected' : ''}>M</option>
                         <option value="F" ${patient.gender === 'F' ? 'selected' : ''}>F</option>
+                        <option value="X" ${patient.gender === 'X' ? 'selected' : ''}>X</option>
                     </select>
                 </div>
                 <div class="col-md-4">
@@ -891,8 +921,12 @@ function renderStep1() {
                     <input type="email" class="form-control" id="patientEmail" value="${escapeHtml(patient.email || '')}">
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Note iniziali</label>
-                    <textarea class="form-control" id="patientNotes" rows="2">${escapeHtml(therapyWizardState.initial_notes || '')}</textarea>
+                    <label class="form-label">Note paziente</label>
+                    <textarea class="form-control" id="patientNotes" rows="2">${escapeHtml(patient.notes || '')}</textarea>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Note terapia</label>
+                    <textarea class="form-control" id="therapyNotes" rows="2">${escapeHtml(therapyWizardState.initial_notes || '')}</textarea>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Patologia seguita *</label>
@@ -1287,7 +1321,7 @@ function collectStep1Data() {
     patient.gender = document.getElementById('patientGender')?.value || '';
     therapyWizardState.patient = patient;
 
-    therapyWizardState.initial_notes = document.getElementById('patientNotes')?.value || '';
+    therapyWizardState.initial_notes = document.getElementById('therapyNotes')?.value || '';
     const primary = document.getElementById('primaryCondition')?.value || '';
     const other = document.getElementById('primaryConditionOther')?.value || '';
     therapyWizardState.primary_condition = primary === 'Altro' && other ? other : (primary || other || null);
@@ -2086,7 +2120,14 @@ async function submitTherapy() {
         const data = await resp.json();
         if (data.success) {
             alert('Terapia salvata con successo');
+            const savedTherapyId = data.data?.therapy_id ?? currentTherapyId;
             clearWizardDraft();
+            if (savedTherapyId && savedTherapyId !== currentTherapyId) {
+                clearWizardDraft(savedTherapyId);
+            }
+            if (savedTherapyId) {
+                currentTherapyId = savedTherapyId;
+            }
             skipDraftOnHide = true;
             wizardModalInstance?.hide();
             if (typeof loadTherapies === 'function') {

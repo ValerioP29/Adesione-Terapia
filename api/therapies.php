@@ -94,11 +94,30 @@ function upsertInitialFollowupChecklist(PDO $pdo, $therapy_id, $pharmacy_id, $us
         $initialCheckId = $pdo->lastInsertId();
     }
 
+    $existingAnswersMap = [];
+    $existingAnswerRows = db_fetch_all(
+        "SELECT q.question_key, a.answer_value
+         FROM jta_therapy_checklist_answers a
+         JOIN jta_therapy_checklist_questions q ON a.question_id = q.id
+         WHERE a.followup_id = ?",
+        [$initialCheckId]
+    );
+    foreach ($existingAnswerRows as $row) {
+        $questionKey = $row['question_key'] ?? null;
+        if ($questionKey) {
+            $existingAnswersMap[$questionKey] = $row['answer_value'];
+        }
+    }
+
     executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_checklist_answers WHERE followup_id = ?", [$initialCheckId]);
 
-    $answersMap = $condition_survey && isset($condition_survey['answers']) && is_array($condition_survey['answers'])
+    $incomingAnswersMap = $condition_survey && isset($condition_survey['answers']) && is_array($condition_survey['answers'])
         ? $condition_survey['answers']
         : [];
+    $mergedAnswersMap = $existingAnswersMap;
+    foreach ($incomingAnswersMap as $key => $value) {
+        $mergedAnswersMap[$key] = $value;
+    }
     $questionRows = db_fetch_all(
         "SELECT id, question_key FROM jta_therapy_checklist_questions WHERE therapy_id = ? ORDER BY sort_order ASC, id ASC",
         [$therapy_id]
@@ -106,8 +125,8 @@ function upsertInitialFollowupChecklist(PDO $pdo, $therapy_id, $pharmacy_id, $us
     foreach ($questionRows as $row) {
         $answerValue = null;
         $key = $row['question_key'] ?? null;
-        if ($key && array_key_exists($key, $answersMap)) {
-            $answerValue = $answersMap[$key];
+        if ($key && array_key_exists($key, $mergedAnswersMap)) {
+            $answerValue = $mergedAnswersMap[$key];
             if (is_bool($answerValue)) {
                 $answerValue = $answerValue ? 'true' : 'false';
             }
@@ -635,18 +654,20 @@ switch ($method) {
                 );
             }
 
-            executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_condition_surveys WHERE therapy_id = ?", [$therapy_id]);
-            if ($condition_survey) {
-                executeQueryWithTypes($pdo, 
-                    "INSERT INTO jta_therapy_condition_surveys (therapy_id, condition_type, level, answers, compiled_at) VALUES (?,?,?,?,?)",
-                    [
-                        $therapy_id,
-                        $condition_survey['condition_type'] ?? $primary_condition,
-                        $condition_survey['level'] ?? 'base',
-                        isset($condition_survey['answers']) ? json_encode($condition_survey['answers']) : null,
-                        $condition_survey['compiled_at'] ?? date('Y-m-d H:i:s')
-                    ]
-                );
+            if (array_key_exists('condition_survey', $input)) {
+                executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_condition_surveys WHERE therapy_id = ?", [$therapy_id]);
+                if ($condition_survey) {
+                    executeQueryWithTypes($pdo, 
+                        "INSERT INTO jta_therapy_condition_surveys (therapy_id, condition_type, level, answers, compiled_at) VALUES (?,?,?,?,?)",
+                        [
+                            $therapy_id,
+                            $condition_survey['condition_type'] ?? $primary_condition,
+                            $condition_survey['level'] ?? 'base',
+                            isset($condition_survey['answers']) ? json_encode($condition_survey['answers']) : null,
+                            $condition_survey['compiled_at'] ?? date('Y-m-d H:i:s')
+                        ]
+                    );
+                }
             }
 
             if ($condition_survey) {

@@ -47,13 +47,14 @@ switch ($method) {
         }
         try {
             db_query(
-                "INSERT INTO jta_patients (pharmacy_id, first_name, last_name, birth_date, codice_fiscale, phone, email, notes) VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO jta_patients (pharmacy_id, first_name, last_name, birth_date, codice_fiscale, gender, phone, email, notes) VALUES (?,?,?,?,?,?,?,?,?)",
                 [
                     $pharmacy_id,
                     $input['first_name'],
                     $input['last_name'],
                     $input['birth_date'] ?? null,
                     $input['codice_fiscale'] ?? null,
+                    $input['gender'] ?? null,
                     $input['phone'] ?? null,
                     $input['email'] ?? null,
                     $input['notes'] ?? null
@@ -75,12 +76,13 @@ switch ($method) {
         }
         try {
             db_query(
-                "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, phone = ?, email = ?, notes = ?, updated_at = NOW() WHERE id = ? AND pharmacy_id = ?",
+                "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ?, updated_at = NOW() WHERE id = ? AND pharmacy_id = ?",
                 [
                     $input['first_name'] ?? '',
                     $input['last_name'] ?? '',
                     $input['birth_date'] ?? null,
                     $input['codice_fiscale'] ?? null,
+                    $input['gender'] ?? null,
                     $input['phone'] ?? null,
                     $input['email'] ?? null,
                     $input['notes'] ?? null,

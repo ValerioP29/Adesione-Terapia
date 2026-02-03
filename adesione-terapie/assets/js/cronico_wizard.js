@@ -8,6 +8,7 @@ let therapyWizardState = {
     doctor_info: {},
     biometric_info: {},
     therapy_assistants: [],
+    assistant_draft: null,
     adherence_base: {},
     condition_survey: {},
     risk_score: null,
@@ -107,6 +108,9 @@ function collectCurrentStepData() {
     switch (currentWizardStep) {
         case 1:
             collectStep1Data();
+            break;
+        case 2:
+            collectStep2Data();
             break;
         case 3:
             collectStep3Data();
@@ -473,6 +477,7 @@ function getDefaultWizardState() {
         doctor_info: {},
         biometric_info: {},
         therapy_assistants: [],
+        assistant_draft: null,
         adherence_base: {},
         condition_survey: {
             condition_type: null,
@@ -766,26 +771,7 @@ function updateNavigationButtons() {
 function nextStep() {
     if (!validateStep(currentWizardStep)) return;
 
-    // Persist data of the step we are leaving before rendering the next one
-    switch (currentWizardStep) {
-        case 1:
-            collectStep1Data();
-            break;
-        case 3:
-            collectStep3Data();
-            break;
-        case 4:
-            collectStep4Data();
-            break;
-        case 5:
-            collectStep5Data();
-            break;
-        case 6:
-            collectStep6Data();
-            break;
-        default:
-            break;
-    }
+    collectCurrentStepData();
 
     if (currentWizardStep < totalWizardSteps) {
         currentWizardStep += 1;
@@ -795,23 +781,7 @@ function nextStep() {
 }
 
 function prevStep() {
-    // Persist data before going back so user input is not lost
-    switch (currentWizardStep) {
-        case 3:
-            collectStep3Data();
-            break;
-        case 4:
-            collectStep4Data();
-            break;
-        case 5:
-            collectStep5Data();
-            break;
-        case 6:
-            collectStep6Data();
-            break;
-        default:
-            break;
-    }
+    collectCurrentStepData();
 
     if (currentWizardStep > 1) {
         currentWizardStep -= 1;
@@ -1386,12 +1356,49 @@ function collectStep1Data() {
     };
 }
 
+function collectStep2Data() {
+    const assistants = therapyWizardState.therapy_assistants || [];
+    document.querySelectorAll('#assistantForms [data-assistant-index]').forEach((input) => {
+        const idx = parseInt(input.getAttribute('data-assistant-index'), 10);
+        const field = input.getAttribute('data-field');
+        if (Number.isNaN(idx) || !field) return;
+        const assistant = assistants[idx] || {};
+        const value = input.value;
+        if (field === 'role' || field === 'contact_channel') {
+            assistant[field] = value || null;
+        } else {
+            assistant.consents_json = assistant.consents_json || {};
+            assistant.consents_json[field] = value || '';
+        }
+        assistants[idx] = assistant;
+    });
+    therapyWizardState.therapy_assistants = assistants;
+
+    const assistantDraft = {
+        first_name: document.getElementById('assistantFirstName')?.value?.trim() || '',
+        last_name: document.getElementById('assistantLastName')?.value?.trim() || '',
+        phone: document.getElementById('assistantPhone')?.value?.trim() || '',
+        email: document.getElementById('assistantEmail')?.value?.trim() || '',
+        type: document.getElementById('assistantType')?.value || '',
+        relation_to_patient: document.getElementById('assistantRelation')?.value || '',
+        preferred_contact: document.getElementById('assistantPreferredContact')?.value || '',
+        notes: document.getElementById('assistantNotes')?.value || ''
+    };
+    const hasDraft = Object.entries(assistantDraft).some(([key, value]) => {
+        if (!value) return false;
+        if (key === 'type' && value === 'familiare') return false;
+        return true;
+    });
+    therapyWizardState.assistant_draft = hasDraft ? assistantDraft : null;
+}
+
 function renderStep2() {
-    collectStep1Data();
     const content = document.getElementById('wizardContent');
     if (!content) return;
 
     const assistants = therapyWizardState.therapy_assistants || [];
+    const assistantDraft = therapyWizardState.assistant_draft || {};
+    const hasAssistantDraft = Object.values(assistantDraft).some((value) => value);
 
     content.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1402,49 +1409,49 @@ function renderStep2() {
         <div id="assistantsList" class="mb-4"></div>
         <div id="assistantForms" class="mb-4"></div>
 
-        <div id="newAssistantForm" class="card mb-4 d-none">
+        <div id="newAssistantForm" class="card mb-4 ${hasAssistantDraft ? '' : 'd-none'}">
             <div class="card-body">
                 <h6 class="mb-3">Nuovo assistente</h6>
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Nome *</label>
-                        <input type="text" class="form-control" id="assistantFirstName">
+                        <input type="text" class="form-control" id="assistantFirstName" value="${escapeHtml(assistantDraft.first_name || '')}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Cognome</label>
-                        <input type="text" class="form-control" id="assistantLastName">
+                        <input type="text" class="form-control" id="assistantLastName" value="${escapeHtml(assistantDraft.last_name || '')}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Telefono</label>
-                        <input type="text" class="form-control" id="assistantPhone">
+                        <input type="text" class="form-control" id="assistantPhone" value="${escapeHtml(assistantDraft.phone || '')}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email</label>
-                        <input type="email" class="form-control" id="assistantEmail">
+                        <input type="email" class="form-control" id="assistantEmail" value="${escapeHtml(assistantDraft.email || '')}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Tipo</label>
                         <select class="form-select" id="assistantType">
-                            <option value="familiare">Familiare</option>
-                            <option value="caregiver">Caregiver</option>
+                            <option value="familiare" ${assistantDraft.type === 'familiare' ? 'selected' : ''}>Familiare</option>
+                            <option value="caregiver" ${assistantDraft.type === 'caregiver' ? 'selected' : ''}>Caregiver</option>
                         </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Relazione con il paziente</label>
-                        <input type="text" class="form-control" id="assistantRelation">
+                        <input type="text" class="form-control" id="assistantRelation" value="${escapeHtml(assistantDraft.relation_to_patient || '')}">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Canale di contatto preferito</label>
                         <select class="form-select" id="assistantPreferredContact">
                             <option value="">Seleziona</option>
-                            <option value="phone">Telefono</option>
-                            <option value="email">Email</option>
-                            <option value="whatsapp">WhatsApp</option>
+                            <option value="phone" ${assistantDraft.preferred_contact === 'phone' ? 'selected' : ''}>Telefono</option>
+                            <option value="email" ${assistantDraft.preferred_contact === 'email' ? 'selected' : ''}>Email</option>
+                            <option value="whatsapp" ${assistantDraft.preferred_contact === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
                         </select>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Note</label>
-                        <textarea class="form-control" id="assistantNotes" rows="2"></textarea>
+                        <textarea class="form-control" id="assistantNotes" rows="2">${escapeHtml(assistantDraft.notes || '')}</textarea>
                     </div>
                 </div>
             </div>
@@ -1479,7 +1486,7 @@ function renderStep2() {
         saveBtn.addEventListener('click', saveNewAssistant);
     }
 
-        renderAssistantForms(assistants);
+    renderAssistantForms(assistants);
     }
 
 function renderAssistantForms(list) {
@@ -1635,6 +1642,7 @@ function hideAndResetAssistantForm() {
   if (formCard) {
       formCard.classList.add('d-none');
   }
+  therapyWizardState.assistant_draft = null;
   const fields = [
       'assistantFirstName',
       'assistantLastName',
@@ -1651,6 +1659,7 @@ function hideAndResetAssistantForm() {
       if (el.tagName === 'SELECT') el.value = '';
       else if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') el.value = '';
   });
+  persistWizardDraft({ immediate: true, collectCurrent: false });
 }
 
 function renderStep3() {
@@ -1755,7 +1764,6 @@ function collectStep3Data() {
 }
 
 function renderStep4() {
-    collectStep3Data();
     const content = document.getElementById('wizardContent');
     if (!content) return;
     const survey = therapyWizardState.condition_survey || {};
@@ -1837,7 +1845,6 @@ function collectStep4Data() {
 }
 
 function renderStep5() {
-    collectStep4Data();
     const content = document.getElementById('wizardContent');
     if (!content) return;
     const flags = therapyWizardState.flags || {};
@@ -1951,7 +1958,6 @@ function collectStep5Data() {
 }
 
 function renderStep6() {
-    collectStep5Data();
     const content = document.getElementById('wizardContent');
     if (!content) return;
     const consent = therapyWizardState.consent || {};

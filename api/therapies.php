@@ -467,11 +467,12 @@ switch ($method) {
         try {
             $pdo->beginTransaction();
 
-            $therapy = db_fetch_one("SELECT id FROM jta_therapies WHERE id = ? AND pharmacy_id = ?", [$therapy_id, $pharmacy_id]);
+            $therapy = db_fetch_one("SELECT id, patient_id FROM jta_therapies WHERE id = ? AND pharmacy_id = ?", [$therapy_id, $pharmacy_id]);
             if (!$therapy) {
                 $pdo->rollBack();
                 respond(false, null, 'Terapia non trovata per la farmacia', 404);
             }
+            $currentPatientId = $therapy['patient_id'] ?? null;
 
             $patient_id = $patient['id'] ?? null;
             if ($patient_id) {
@@ -496,9 +497,11 @@ switch ($method) {
                 );
             }
 
+            $therapyPatientId = $patient_id ?: $currentPatientId;
             executeQueryWithTypes($pdo, 
-                "UPDATE jta_therapies SET therapy_title = ?, therapy_description = ?, status = ?, start_date = ?, end_date = ? WHERE id = ? AND pharmacy_id = ?",
+                "UPDATE jta_therapies SET patient_id = ?, therapy_title = ?, therapy_description = ?, status = ?, start_date = ?, end_date = ? WHERE id = ? AND pharmacy_id = ?",
                 [
+                    $therapyPatientId,
                     $input['therapy_title'] ?? ('– ' . $primary_condition),
                     $input['therapy_description'] ?? $initial_notes,
                     $input['status'] ?? 'active',

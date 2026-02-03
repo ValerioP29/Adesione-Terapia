@@ -580,6 +580,7 @@ function buildWizardModalShell() {
                         <button type="button" class="btn btn-outline-danger ms-2" id="wizardResetBtn">Reset/Azzera tutto</button>
                     </div>
                     <div>
+                        <button type="button" class="btn btn-outline-success d-none" id="wizardSaveStepBtn"><i class="fas fa-save me-2"></i>Salva</button>
                         <button type="button" class="btn btn-outline-primary" id="wizardNextBtn">Avanti<i class="fas fa-arrow-right ms-2"></i></button>
                         <button type="button" class="btn btn-primary d-none" id="wizardSubmitBtn"><i class="fas fa-save me-2"></i>Conferma e salva</button>
                     </div>
@@ -610,11 +611,13 @@ function buildWizardModalShell() {
     const nextBtn = container.querySelector('#wizardNextBtn');
     const submitBtn = container.querySelector('#wizardSubmitBtn');
     const resetBtn = container.querySelector('#wizardResetBtn');
+    const saveStepBtn = container.querySelector('#wizardSaveStepBtn');
 
     if (prevBtn) prevBtn.addEventListener('click', prevStep);
     if (nextBtn) nextBtn.addEventListener('click', nextStep);
     if (submitBtn) submitBtn.addEventListener('click', submitTherapy);
     if (resetBtn) resetBtn.addEventListener('click', resetWizardDraft);
+    if (saveStepBtn) saveStepBtn.addEventListener('click', saveCurrentStep);
 }
 
 function handleWizardFieldChange(event) {
@@ -762,10 +765,12 @@ function updateNavigationButtons() {
     const prevBtn = document.getElementById('wizardPrevBtn');
     const nextBtn = document.getElementById('wizardNextBtn');
     const submitBtn = document.getElementById('wizardSubmitBtn');
+    const saveStepBtn = document.getElementById('wizardSaveStepBtn');
 
     if (prevBtn) prevBtn.disabled = currentWizardStep === 1;
     if (nextBtn) nextBtn.classList.toggle('d-none', currentWizardStep === totalWizardSteps);
     if (submitBtn) submitBtn.classList.toggle('d-none', currentWizardStep !== totalWizardSteps);
+    if (saveStepBtn) saveStepBtn.classList.toggle('d-none', !currentTherapyId);
 }
 
 function nextStep() {
@@ -2171,6 +2176,124 @@ function escapeHtml(value) {
 
 function sanitizeNullish(obj) {
     return obj || {};
+}
+
+function ensureWizardToastContainer() {
+    let container = document.getElementById('wizardToastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'wizardToastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.zIndex = '1080';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+function showWizardToast(message) {
+    const container = ensureWizardToastContainer();
+    const toastEl = document.createElement('div');
+    toastEl.className = 'toast align-items-center text-bg-success border-0';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${escapeHtml(message)}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    container.appendChild(toastEl);
+    if (window.bootstrap?.Toast) {
+        const bsToast = new bootstrap.Toast(toastEl, { delay: 2000 });
+        toastEl.addEventListener('hidden.bs.toast', () => {
+            toastEl.remove();
+        });
+        bsToast.show();
+    } else {
+        toastEl.classList.add('show');
+        window.setTimeout(() => toastEl.remove(), 2000);
+    }
+}
+
+function buildStepPayload(step) {
+    switch (step) {
+        case 1:
+            collectStep1Data();
+            return {
+                patient: therapyWizardState.patient,
+                primary_condition: therapyWizardState.primary_condition,
+                initial_notes: therapyWizardState.initial_notes,
+                general_anamnesis: therapyWizardState.general_anamnesis,
+                detailed_intake: therapyWizardState.detailed_intake,
+                doctor_info: therapyWizardState.doctor_info,
+                biometric_info: therapyWizardState.biometric_info
+            };
+        case 2:
+            collectStep2Data();
+            return {
+                therapy_assistants: therapyWizardState.therapy_assistants
+            };
+        case 3:
+            collectStep3Data();
+            return {
+                adherence_base: therapyWizardState.adherence_base
+            };
+        case 4:
+            collectStep4Data();
+            return {
+                condition_survey: therapyWizardState.condition_survey
+            };
+        case 5:
+            collectStep5Data();
+            return {
+                risk_score: therapyWizardState.risk_score,
+                flags: therapyWizardState.flags,
+                notes_initial: therapyWizardState.notes_initial
+            };
+        case 6:
+            collectStep6Data();
+            return {
+                consent: therapyWizardState.consent
+            };
+        default:
+            return null;
+    }
+}
+
+async function refreshTherapyStateFromServer() {
+    if (!currentTherapyId) return;
+    const defaultState = getDefaultWizardState();
+    const serverPayload = await loadTherapyForEdit(currentTherapyId);
+    if (serverPayload?.state) {
+        therapyWizardState = mergeWizardState(defaultState, serverPayload.state);
+    }
+    renderCurrentStep();
+}
+
+async function saveCurrentStep() {
+    if (!currentTherapyId) return;
+    if (!validateStep(currentWizardStep)) return;
+    const payload = buildStepPayload(currentWizardStep);
+    if (!payload) return;
+
+    try {
+        const resp = await fetch(`api/therapies.php?id=${currentTherapyId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (data.success) {
+            showWizardToast('Salvato');
+            await refreshTherapyStateFromServer();
+            persistWizardDraft({ immediate: true, collectCurrent: false });
+        } else {
+            alert(data.error || 'Errore salvataggio terapia');
+        }
+    } catch (err) {
+        alert('Errore di rete');
+    }
 }
 
 window.openTherapyWizard = openTherapyWizard;

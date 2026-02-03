@@ -301,22 +301,23 @@ switch ($method) {
             respond(false, null, 'Farmacia non disponibile', 400);
         }
 
-        $patient = normalizeDateFields(sanitize($input['patient'] ?? []));
-        $primary_condition = sanitize($input['primary_condition'] ?? null);
-        $initial_notes = $input['initial_notes'] ?? null;
-        $general_anamnesis = $input['general_anamnesis'] ?? null;
-        $detailed_intake = $input['detailed_intake'] ?? null;
-        $therapy_assistants = $input['therapy_assistants'] ?? [];
-        $adherence_base = $input['adherence_base'] ?? null;
-        $condition_survey = $input['condition_survey'] ?? null;
-        $risk_score = $input['risk_score'] ?? null;
-        $flags = $input['flags'] ?? null;
-        $notes_initial = $input['notes_initial'] ?? null;
-        $follow_up_date = $input['follow_up_date'] ?? null;
-        $consent = $input['consent'] ?? null;
-        $doctor_info = $input['doctor_info'] ?? null;
-        $biometric_info = $input['biometric_info'] ?? null;
-        $care_context = $input['care_context'] ?? null;
+        $hasPatient = array_key_exists('patient', $input);
+        $patient = $hasPatient ? normalizeDateFields(sanitize($input['patient'] ?? [])) : [];
+        $primary_condition = array_key_exists('primary_condition', $input) ? sanitize($input['primary_condition'] ?? null) : null;
+        $initial_notes = array_key_exists('initial_notes', $input) ? ($input['initial_notes'] ?? null) : null;
+        $general_anamnesis = array_key_exists('general_anamnesis', $input) ? ($input['general_anamnesis'] ?? null) : null;
+        $detailed_intake = array_key_exists('detailed_intake', $input) ? ($input['detailed_intake'] ?? null) : null;
+        $therapy_assistants = array_key_exists('therapy_assistants', $input) ? ($input['therapy_assistants'] ?? []) : [];
+        $adherence_base = array_key_exists('adherence_base', $input) ? ($input['adherence_base'] ?? null) : null;
+        $condition_survey = array_key_exists('condition_survey', $input) ? ($input['condition_survey'] ?? null) : null;
+        $risk_score = array_key_exists('risk_score', $input) ? ($input['risk_score'] ?? null) : null;
+        $flags = array_key_exists('flags', $input) ? ($input['flags'] ?? null) : null;
+        $notes_initial = array_key_exists('notes_initial', $input) ? ($input['notes_initial'] ?? null) : null;
+        $follow_up_date = array_key_exists('follow_up_date', $input) ? ($input['follow_up_date'] ?? null) : null;
+        $consent = array_key_exists('consent', $input) ? ($input['consent'] ?? null) : null;
+        $doctor_info = array_key_exists('doctor_info', $input) ? ($input['doctor_info'] ?? null) : null;
+        $biometric_info = array_key_exists('biometric_info', $input) ? ($input['biometric_info'] ?? null) : null;
+        $care_context = array_key_exists('care_context', $input) ? ($input['care_context'] ?? null) : null;
 
         if (!$patient || empty($patient['first_name']) || empty($patient['last_name']) || !$primary_condition) {
             respond(false, null, 'Dati paziente o patologia mancanti', 400);
@@ -497,96 +498,166 @@ switch ($method) {
             respond(false, null, 'ID terapia o farmacia mancanti', 400);
         }
 
-        $patient = normalizeDateFields(sanitize($input['patient'] ?? []));
-        $primary_condition = sanitize($input['primary_condition'] ?? null);
-        $initial_notes = $input['initial_notes'] ?? null;
-        $general_anamnesis = $input['general_anamnesis'] ?? null;
-        $detailed_intake = $input['detailed_intake'] ?? null;
-        $therapy_assistants = $input['therapy_assistants'] ?? [];
-        $adherence_base = $input['adherence_base'] ?? null;
-        $condition_survey = $input['condition_survey'] ?? null;
-        $risk_score = $input['risk_score'] ?? null;
-        $flags = $input['flags'] ?? null;
-        $notes_initial = $input['notes_initial'] ?? null;
-        $follow_up_date = $input['follow_up_date'] ?? null;
-        $consent = $input['consent'] ?? null;
-        $doctor_info = $input['doctor_info'] ?? null;
-        $biometric_info = $input['biometric_info'] ?? null;
-        $care_context = $input['care_context'] ?? null;
+        $hasPatient = array_key_exists('patient', $input);
+        $hasPrimaryCondition = array_key_exists('primary_condition', $input);
+        $patient = $hasPatient ? normalizeDateFields(sanitize($input['patient'] ?? [])) : [];
+        $primary_condition = $hasPrimaryCondition ? sanitize($input['primary_condition'] ?? null) : null;
+        $initial_notes = array_key_exists('initial_notes', $input) ? ($input['initial_notes'] ?? null) : null;
+        $general_anamnesis = array_key_exists('general_anamnesis', $input) ? ($input['general_anamnesis'] ?? null) : null;
+        $detailed_intake = array_key_exists('detailed_intake', $input) ? ($input['detailed_intake'] ?? null) : null;
+        $therapy_assistants = array_key_exists('therapy_assistants', $input) ? ($input['therapy_assistants'] ?? []) : [];
+        $adherence_base = array_key_exists('adherence_base', $input) ? ($input['adherence_base'] ?? null) : null;
+        $condition_survey = array_key_exists('condition_survey', $input) ? ($input['condition_survey'] ?? null) : null;
+        $risk_score = array_key_exists('risk_score', $input) ? ($input['risk_score'] ?? null) : null;
+        $flags = array_key_exists('flags', $input) ? ($input['flags'] ?? null) : null;
+        $notes_initial = array_key_exists('notes_initial', $input) ? ($input['notes_initial'] ?? null) : null;
+        $follow_up_date = array_key_exists('follow_up_date', $input) ? ($input['follow_up_date'] ?? null) : null;
+        $consent = array_key_exists('consent', $input) ? ($input['consent'] ?? null) : null;
+        $doctor_info = array_key_exists('doctor_info', $input) ? ($input['doctor_info'] ?? null) : null;
+        $biometric_info = array_key_exists('biometric_info', $input) ? ($input['biometric_info'] ?? null) : null;
+        $care_context = array_key_exists('care_context', $input) ? ($input['care_context'] ?? null) : null;
+
+        if ($hasPatient) {
+            $patient_id = $patient['id'] ?? null;
+            $first_name = trim($patient['first_name'] ?? '');
+            $last_name = trim($patient['last_name'] ?? '');
+            if (!$patient_id && (!$first_name || !$last_name)) {
+                respond(false, null, 'Dati paziente mancanti', 400);
+            }
+        }
+        if ($hasPrimaryCondition && ($primary_condition === null || $primary_condition === '')) {
+            respond(false, null, 'Patologia principale mancante', 400);
+        }
 
         try {
             $pdo->beginTransaction();
 
-            $therapy = db_fetch_one("SELECT id, patient_id FROM jta_therapies WHERE id = ? AND pharmacy_id = ?", [$therapy_id, $pharmacy_id]);
+            $therapy = db_fetch_one("SELECT id, patient_id, therapy_title, therapy_description, status, start_date, end_date FROM jta_therapies WHERE id = ? AND pharmacy_id = ?", [$therapy_id, $pharmacy_id]);
             if (!$therapy) {
                 $pdo->rollBack();
                 respond(false, null, 'Terapia non trovata per la farmacia', 404);
             }
             $currentPatientId = $therapy['patient_id'] ?? null;
 
-            $patient_id = $patient['id'] ?? null;
-            if ($patient_id) {
-                $patientCheck = fetchPatientForPharmacy($patient_id, $pharmacy_id);
-                if (!$patientCheck) {
-                    $pdo->rollBack();
-                    respond(false, null, 'Paziente non trovato per la farmacia', 404);
+            $patient_id = $hasPatient ? ($patient['id'] ?? null) : null;
+            if ($hasPatient) {
+                if (!$patient_id) {
+                    executeQueryWithTypes($pdo,
+                        "INSERT INTO jta_patients (pharmacy_id, first_name, last_name, birth_date, codice_fiscale, gender, phone, email, notes) VALUES (?,?,?,?,?,?,?,?,?)",
+                        [
+                            $pharmacy_id,
+                            $patient['first_name'] ?? '',
+                            $patient['last_name'] ?? '',
+                            $patient['birth_date'] ?? null,
+                            $patient['codice_fiscale'] ?? null,
+                            $patient['gender'] ?? null,
+                            $patient['phone'] ?? null,
+                            $patient['email'] ?? null,
+                            $patient['notes'] ?? null
+                        ]
+                    );
+                    $patient_id = $pdo->lastInsertId();
+                    executeQueryWithTypes($pdo, "INSERT INTO jta_pharma_patient (pharma_id, patient_id) VALUES (?, ?)", [$pharmacy_id, $patient_id]);
+                } else {
+                    $patientCheck = fetchPatientForPharmacy($patient_id, $pharmacy_id);
+                    if (!$patientCheck) {
+                        $pdo->rollBack();
+                        respond(false, null, 'Paziente non trovato per la farmacia', 404);
+                    }
+                    executeQueryWithTypes($pdo,
+                        "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
+                        [
+                            $patient['first_name'] ?? '',
+                            $patient['last_name'] ?? '',
+                            $patient['birth_date'] ?? null,
+                            $patient['codice_fiscale'] ?? null,
+                            $patient['gender'] ?? null,
+                            $patient['phone'] ?? null,
+                            $patient['email'] ?? null,
+                            $patient['notes'] ?? null,
+                            $patient_id,
+                            $pharmacy_id
+                        ]
+                    );
                 }
-                executeQueryWithTypes($pdo, 
-                    "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
-                    [
-                        $patient['first_name'] ?? '',
-                        $patient['last_name'] ?? '',
-                        $patient['birth_date'] ?? null,
-                        $patient['codice_fiscale'] ?? null,
-                        $patient['gender'] ?? null,
-                        $patient['phone'] ?? null,
-                        $patient['email'] ?? null,
-                        $patient['notes'] ?? null,
-                        $patient_id,
-                        $pharmacy_id
-                    ]
-                );
             }
 
-            $therapyPatientId = $patient_id ?: $currentPatientId;
-            executeQueryWithTypes($pdo, 
+            $careRow = db_fetch_one("SELECT * FROM jta_therapy_chronic_care WHERE therapy_id = ?", [$therapy_id]) ?: [];
+            $primary_condition = $hasPrimaryCondition
+                ? $primary_condition
+                : ($careRow['primary_condition'] ?? null);
+
+            $therapyTitlePayload = array_key_exists('therapy_title', $input)
+                ? $input['therapy_title']
+                : ($hasPrimaryCondition
+                    ? ('– ' . $primary_condition)
+                    : ($therapy['therapy_title'] ?? null));
+            $therapyDescriptionPayload = array_key_exists('therapy_description', $input)
+                ? $input['therapy_description']
+                : (array_key_exists('initial_notes', $input)
+                    ? $initial_notes
+                    : ($therapy['therapy_description'] ?? null));
+            $therapyStatusPayload = array_key_exists('status', $input) ? $input['status'] : ($therapy['status'] ?? 'active');
+            $therapyStartPayload = array_key_exists('start_date', $input) ? $input['start_date'] : ($therapy['start_date'] ?? date('Y-m-d'));
+            $therapyEndPayload = array_key_exists('end_date', $input) ? $input['end_date'] : ($therapy['end_date'] ?? null);
+
+            $therapyPatientId = $hasPatient ? ($patient_id ?: $currentPatientId) : $currentPatientId;
+            executeQueryWithTypes($pdo,
                 "UPDATE jta_therapies SET patient_id = ?, therapy_title = ?, therapy_description = ?, status = ?, start_date = ?, end_date = ? WHERE id = ? AND pharmacy_id = ?",
                 [
                     $therapyPatientId,
-                    $input['therapy_title'] ?? ('– ' . $primary_condition),
-                    $input['therapy_description'] ?? $initial_notes,
-                    $input['status'] ?? 'active',
-                    $input['start_date'] ?? date('Y-m-d'),
-                    $input['end_date'] ?? null,
+                    $therapyTitlePayload,
+                    $therapyDescriptionPayload,
+                    $therapyStatusPayload,
+                    $therapyStartPayload,
+                    $therapyEndPayload,
                     $therapy_id,
                     $pharmacy_id
                 ]
             );
 
-            $existing = db_fetch_one("SELECT id FROM jta_therapy_chronic_care WHERE therapy_id = ?", [$therapy_id]);
-            $existingDetails = db_fetch_one("SELECT doctor_info, biometric_info, care_context FROM jta_therapy_chronic_care WHERE therapy_id = ?", [$therapy_id]);
             $doctorInfoPayload = array_key_exists('doctor_info', $input)
                 ? ($doctor_info ? json_encode($doctor_info) : null)
-                : ($existingDetails['doctor_info'] ?? null);
+                : ($careRow['doctor_info'] ?? null);
             $biometricInfoPayload = array_key_exists('biometric_info', $input)
                 ? ($biometric_info ? json_encode($biometric_info) : null)
-                : ($existingDetails['biometric_info'] ?? null);
+                : ($careRow['biometric_info'] ?? null);
             $careContextPayload = array_key_exists('care_context', $input)
                 ? ($care_context ? json_encode($care_context) : null)
-                : ($existingDetails['care_context'] ?? null);
+                : ($careRow['care_context'] ?? null);
+            $generalAnamnesisPayload = array_key_exists('general_anamnesis', $input)
+                ? ($general_anamnesis ? json_encode($general_anamnesis) : null)
+                : ($careRow['general_anamnesis'] ?? null);
+            $detailedIntakePayload = array_key_exists('detailed_intake', $input)
+                ? ($detailed_intake ? json_encode($detailed_intake) : null)
+                : ($careRow['detailed_intake'] ?? null);
+            $adherenceBasePayload = array_key_exists('adherence_base', $input)
+                ? ($adherence_base ? json_encode($adherence_base) : null)
+                : ($careRow['adherence_base'] ?? null);
+            $flagsPayload = array_key_exists('flags', $input)
+                ? ($flags ? json_encode($flags) : null)
+                : ($careRow['flags'] ?? null);
+            $consentPayload = array_key_exists('consent', $input)
+                ? ($consent ? json_encode($consent) : null)
+                : ($careRow['consent'] ?? null);
+            $riskScorePayload = array_key_exists('risk_score', $input) ? $risk_score : ($careRow['risk_score'] ?? null);
+            $notesInitialPayload = array_key_exists('notes_initial', $input) ? $notes_initial : ($careRow['notes_initial'] ?? null);
+            $followUpDatePayload = array_key_exists('follow_up_date', $input) ? $follow_up_date : ($careRow['follow_up_date'] ?? null);
+
+            $existing = db_fetch_one("SELECT id FROM jta_therapy_chronic_care WHERE therapy_id = ?", [$therapy_id]);
             if ($existing) {
                 executeQueryWithTypes($pdo,
                     "UPDATE jta_therapy_chronic_care SET primary_condition = ?, general_anamnesis = ?, detailed_intake = ?, adherence_base = ?, risk_score = ?, flags = ?, notes_initial = ?, follow_up_date = ?, consent = ?, doctor_info = ?, biometric_info = ?, care_context = ?, updated_at = NOW() WHERE therapy_id = ?",
                     [
                         $primary_condition,
-                        $general_anamnesis ? json_encode($general_anamnesis) : null,
-                        $detailed_intake ? json_encode($detailed_intake) : null,
-                        $adherence_base ? json_encode($adherence_base) : null,
-                        $risk_score,
-                        $flags ? json_encode($flags) : null,
-                        $notes_initial ?? $initial_notes,
-                        $follow_up_date,
-                        $consent ? json_encode($consent) : null,
+                        $generalAnamnesisPayload,
+                        $detailedIntakePayload,
+                        $adherenceBasePayload,
+                        $riskScorePayload,
+                        $flagsPayload,
+                        $notesInitialPayload,
+                        $followUpDatePayload,
+                        $consentPayload,
                         $doctorInfoPayload,
                         $biometricInfoPayload,
                         $careContextPayload,
@@ -599,14 +670,14 @@ switch ($method) {
                     [
                         $therapy_id,
                         $primary_condition,
-                        $general_anamnesis ? json_encode($general_anamnesis) : null,
-                        $detailed_intake ? json_encode($detailed_intake) : null,
-                        $adherence_base ? json_encode($adherence_base) : null,
-                        $risk_score,
-                        $flags ? json_encode($flags) : null,
-                        $notes_initial ?? $initial_notes,
-                        $follow_up_date,
-                        $consent ? json_encode($consent) : null,
+                        $generalAnamnesisPayload,
+                        $detailedIntakePayload,
+                        $adherenceBasePayload,
+                        $riskScorePayload,
+                        $flagsPayload,
+                        $notesInitialPayload,
+                        $followUpDatePayload,
+                        $consentPayload,
                         $doctorInfoPayload,
                         $biometricInfoPayload,
                         $careContextPayload
@@ -614,44 +685,46 @@ switch ($method) {
                 );
             }
 
-            executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_assistant WHERE therapy_id = ?", [$therapy_id]);
-            foreach ($therapy_assistants as $assistant) {
-                $assistant = sanitize($assistant);
-                $assistant_id = $assistant['assistant_id'] ?? null;
-                if (!$assistant_id) {
-                    executeQueryWithTypes($pdo, 
-                        "INSERT INTO jta_assistants (pharma_id, first_name, last_name, phone, email, type, relation_to_patient, preferred_contact, notes) VALUES (?,?,?,?,?,?,?,?,?)",
+            if (array_key_exists('therapy_assistants', $input)) {
+                executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_assistant WHERE therapy_id = ?", [$therapy_id]);
+                foreach ($therapy_assistants as $assistant) {
+                    $assistant = sanitize($assistant);
+                    $assistant_id = $assistant['assistant_id'] ?? null;
+                    if (!$assistant_id) {
+                        executeQueryWithTypes($pdo,
+                            "INSERT INTO jta_assistants (pharma_id, first_name, last_name, phone, email, type, relation_to_patient, preferred_contact, notes) VALUES (?,?,?,?,?,?,?,?,?)",
+                            [
+                                $pharmacy_id,
+                                $assistant['first_name'] ?? '',
+                                $assistant['last_name'] ?? null,
+                                $assistant['phone'] ?? null,
+                                $assistant['email'] ?? null,
+                                $assistant['type'] ?? 'familiare',
+                                $assistant['relation_to_patient'] ?? null,
+                                $assistant['preferred_contact'] ?? null,
+                                $assistant['notes'] ?? null
+                            ]
+                        );
+                        $assistant_id = $pdo->lastInsertId();
+                    } else {
+                        $assistantCheck = fetchAssistantForPharmacy($assistant_id, $pharmacy_id);
+                        if (!$assistantCheck) {
+                            $pdo->rollBack();
+                            respond(false, null, 'Assistente non trovato per la farmacia', 404);
+                        }
+                    }
+                    executeQueryWithTypes($pdo,
+                        "INSERT INTO jta_therapy_assistant (therapy_id, assistant_id, role, contact_channel, preferences_json, consents_json) VALUES (?,?,?,?,?,?)",
                         [
-                            $pharmacy_id,
-                            $assistant['first_name'] ?? '',
-                            $assistant['last_name'] ?? null,
-                            $assistant['phone'] ?? null,
-                            $assistant['email'] ?? null,
-                            $assistant['type'] ?? 'familiare',
-                            $assistant['relation_to_patient'] ?? null,
-                            $assistant['preferred_contact'] ?? null,
-                            $assistant['notes'] ?? null
+                            $therapy_id,
+                            $assistant_id,
+                            $assistant['role'] ?? 'familiare',
+                            $assistant['contact_channel'] ?? null,
+                            isset($assistant['preferences_json']) ? json_encode($assistant['preferences_json']) : null,
+                            isset($assistant['consents_json']) ? json_encode($assistant['consents_json']) : null
                         ]
                     );
-                    $assistant_id = $pdo->lastInsertId();
-                } else {
-                    $assistantCheck = fetchAssistantForPharmacy($assistant_id, $pharmacy_id);
-                    if (!$assistantCheck) {
-                        $pdo->rollBack();
-                        respond(false, null, 'Assistente non trovato per la farmacia', 404);
-                    }
                 }
-                executeQueryWithTypes($pdo, 
-                    "INSERT INTO jta_therapy_assistant (therapy_id, assistant_id, role, contact_channel, preferences_json, consents_json) VALUES (?,?,?,?,?,?)",
-                    [
-                        $therapy_id,
-                        $assistant_id,
-                        $assistant['role'] ?? 'familiare',
-                        $assistant['contact_channel'] ?? null,
-                        isset($assistant['preferences_json']) ? json_encode($assistant['preferences_json']) : null,
-                        isset($assistant['consents_json']) ? json_encode($assistant['consents_json']) : null
-                    ]
-                );
             }
 
             if (array_key_exists('condition_survey', $input)) {
@@ -670,36 +743,38 @@ switch ($method) {
                 }
             }
 
-            if ($condition_survey) {
+            if (array_key_exists('condition_survey', $input) && $condition_survey) {
                 $userId = $_SESSION['user_id'] ?? null;
                 upsertInitialFollowupChecklist($pdo, $therapy_id, $pharmacy_id, $userId, $primary_condition, $condition_survey);
             }
 
-            executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_consents WHERE therapy_id = ?", [$therapy_id]);
-            if ($consent) {
-                $consentSignerName = $consent['signer_name'] ?? '';
-                $consentText = $consent['consent_text'] ?? 'Consenso informato e trattamento dati';
-                $consentSignedAt = $consent['signed_at'] ?? null;
-                if (empty($consentSignedAt)) {
-                    $consentSignedAt = date('Y-m-d H:i:s');
-                }
-                $signatures = $consent['signatures'] ?? null;
-                $signaturePayload = $signatures ? json_encode($signatures) : null;
+            if (array_key_exists('consent', $input)) {
+                executeQueryWithTypes($pdo, "DELETE FROM jta_therapy_consents WHERE therapy_id = ?", [$therapy_id]);
+                if ($consent) {
+                    $consentSignerName = $consent['signer_name'] ?? '';
+                    $consentText = $consent['consent_text'] ?? 'Consenso informato e trattamento dati';
+                    $consentSignedAt = $consent['signed_at'] ?? null;
+                    if (empty($consentSignedAt)) {
+                        $consentSignedAt = date('Y-m-d H:i:s');
+                    }
+                    $signatures = $consent['signatures'] ?? null;
+                    $signaturePayload = $signatures ? json_encode($signatures) : null;
 
-                executeQueryWithTypes($pdo,
-                    "INSERT INTO jta_therapy_consents (therapy_id, signer_name, signer_relation, consent_text, signed_at, ip_address, signature_image, scopes_json, signer_role) VALUES (?,?,?,?,?,?,?,?,?)",
-                    [
-                        $therapy_id,
-                        $consentSignerName,
-                        $consent['signer_relation'] ?? 'patient',
-                        $consentText,
-                        $consentSignedAt,
-                        $_SERVER['REMOTE_ADDR'] ?? null,
-                        $signaturePayload,
-                        isset($consent['scopes']) ? json_encode($consent['scopes']) : null,
-                        $consent['signer_role'] ?? null
-                    ]
-                );
+                    executeQueryWithTypes($pdo,
+                        "INSERT INTO jta_therapy_consents (therapy_id, signer_name, signer_relation, consent_text, signed_at, ip_address, signature_image, scopes_json, signer_role) VALUES (?,?,?,?,?,?,?,?,?)",
+                        [
+                            $therapy_id,
+                            $consentSignerName,
+                            $consent['signer_relation'] ?? 'patient',
+                            $consentText,
+                            $consentSignedAt,
+                            $_SERVER['REMOTE_ADDR'] ?? null,
+                            $signaturePayload,
+                            isset($consent['scopes']) ? json_encode($consent['scopes']) : null,
+                            $consent['signer_role'] ?? null
+                        ]
+                    );
+                }
             }
 
             $pdo->commit();

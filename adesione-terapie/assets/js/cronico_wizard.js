@@ -107,6 +107,36 @@ function normalizeErAccess(value) {
     return '';
 }
 
+function resolveCanonicalValue(canonical, legacy) {
+    if (canonical !== undefined && canonical !== null && canonical !== '') {
+        return canonical;
+    }
+    return legacy;
+}
+
+function resolveCanonicalBool(canonical, legacy) {
+    if (canonical !== undefined && canonical !== null && canonical !== '') {
+        return canonical;
+    }
+    if (legacy === undefined || legacy === null || legacy === '') {
+        return undefined;
+    }
+    if (legacy === true || legacy === false) {
+        return legacy;
+    }
+    if (legacy === 'true' || legacy === 'false') {
+        return legacy === 'true';
+    }
+    return undefined;
+}
+
+function setLegacyIfValue(obj, key, value) {
+    if (value === undefined || value === null || value === '') {
+        return;
+    }
+    obj[key] = value;
+}
+
 function loadWizardDraft(therapyId = currentTherapyId) {
     try {
         const raw = localStorage.getItem(getWizardDraftStorageKey(therapyId));
@@ -1154,14 +1184,6 @@ function renderStep1() {
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Modifiche dosaggio ultimo mese</label>
-                    <select class="form-select" id="doseChanges">
-                        <option value="">Seleziona</option>
-                        <option value="true" ${detailed.dose_changes_last_month ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${detailed.dose_changes_last_month === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
                     <label class="form-label">Tipologia farmaci assunti</label>
                     <input type="text" class="form-control" id="drugTypes" value="${escapeHtml(detailed.drug_types || '')}">
                 </div>
@@ -1501,7 +1523,6 @@ function collectStep1Data() {
 
     const detailed = therapyWizardState.detailed_intake || {};
     setIfDefined(detailed, 'has_helper_for_medication', toBoolIfDefined(getValueIfExists('intakeHelper')));
-    setIfDefined(detailed, 'dose_changes_last_month', toBoolIfDefined(getValueIfExists('doseChanges')));
     setIfDefined(detailed, 'drug_types', getValueIfExists('drugTypes'));
     setIfDefined(detailed, 'uses_supplements', toBoolIfDefined(getValueIfExists('usesSupplements')));
     setIfDefined(detailed, 'supplements_details', getValueIfExists('supplementsDetails'));
@@ -1943,8 +1964,19 @@ function renderStep3() {
     if (!content) return;
     const a = therapyWizardState.adherence_base || {};
     const general = therapyWizardState.general_anamnesis || {};
+    const detailed = therapyWizardState.detailed_intake || {};
     const erVisitsValue = normalizeErAccess(a.er_visits_last_year ?? general.er_access);
-    const adverseDetailsValue = general.allergies || '';
+    const forgetsValue = resolveCanonicalValue(a.forgets_doses, detailed.forgets_medications);
+    const stopsBetterValue = resolveCanonicalBool(a.stops_when_better, detailed.intentional_skips);
+    const reducesValue = resolveCanonicalBool(a.reduces_doses_without_consult, detailed.dose_changes_self_initiated);
+    const knowsDevicesValue = resolveCanonicalBool(a.knows_how_to_use_devices, detailed.knows_how_to_use_device);
+    const legacyAdverseValue = detailed.drug_or_supplement_allergic_reactions;
+    const adverseKnownValue = a.known_adverse_reactions !== undefined && a.known_adverse_reactions !== null
+        ? a.known_adverse_reactions
+        : (legacyAdverseValue === true || legacyAdverseValue === false
+            ? legacyAdverseValue
+            : (legacyAdverseValue ? true : undefined));
+    const adverseDetailsValue = general.allergies || (typeof legacyAdverseValue === 'string' ? legacyAdverseValue : '');
     content.innerHTML = `
         <h5 class="mb-3">Questionario di aderenza base</h5>
         <div class="row g-3">
@@ -1960,33 +1992,33 @@ function renderStep3() {
                 <label class="form-label">Dimentica di assumere le dosi?</label>
                 <select class="form-select" id="adForgets">
                     <option value="">Seleziona</option>
-                    <option value="Mai" ${a.forgets_doses === 'Mai' ? 'selected' : ''}>Mai</option>
-                    <option value="Talvolta" ${a.forgets_doses === 'Talvolta' ? 'selected' : ''}>Talvolta</option>
-                    <option value="Spesso" ${a.forgets_doses === 'Spesso' ? 'selected' : ''}>Spesso</option>
+                    <option value="Mai" ${forgetsValue === 'Mai' ? 'selected' : ''}>Mai</option>
+                    <option value="Talvolta" ${forgetsValue === 'Talvolta' ? 'selected' : ''}>Talvolta</option>
+                    <option value="Spesso" ${forgetsValue === 'Spesso' ? 'selected' : ''}>Spesso</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Interrompe terapia quando si sente meglio?</label>
                 <select class="form-select" id="adStopsBetter">
                     <option value="">Seleziona</option>
-                    <option value="true" ${a.stops_when_better ? 'selected' : ''}>Sì</option>
-                    <option value="false" ${a.stops_when_better === false ? 'selected' : ''}>No</option>
+                    <option value="true" ${stopsBetterValue ? 'selected' : ''}>Sì</option>
+                    <option value="false" ${stopsBetterValue === false ? 'selected' : ''}>No</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Riduce dosi senza consulto?</label>
                 <select class="form-select" id="adReduces">
                     <option value="">Seleziona</option>
-                    <option value="true" ${a.reduces_doses_without_consult ? 'selected' : ''}>Sì</option>
-                    <option value="false" ${a.reduces_doses_without_consult === false ? 'selected' : ''}>No</option>
+                    <option value="true" ${reducesValue ? 'selected' : ''}>Sì</option>
+                    <option value="false" ${reducesValue === false ? 'selected' : ''}>No</option>
                 </select>
             </div>
             <div class="col-md-4">
                 <label class="form-label">Sa usare correttamente i dispositivi?</label>
                 <select class="form-select" id="adKnowDevices">
                     <option value="">Seleziona</option>
-                    <option value="true" ${a.knows_how_to_use_devices ? 'selected' : ''}>Sì</option>
-                    <option value="false" ${a.knows_how_to_use_devices === false ? 'selected' : ''}>No</option>
+                    <option value="true" ${knowsDevicesValue ? 'selected' : ''}>Sì</option>
+                    <option value="false" ${knowsDevicesValue === false ? 'selected' : ''}>No</option>
                 </select>
             </div>
             <div class="col-md-4">
@@ -2014,8 +2046,8 @@ function renderStep3() {
                 <label class="form-label">Reazioni allergiche/avverse note?</label>
                 <select class="form-select" id="adAdverse">
                     <option value="">Seleziona</option>
-                    <option value="true" ${a.known_adverse_reactions ? 'selected' : ''}>Sì</option>
-                    <option value="false" ${a.known_adverse_reactions === false ? 'selected' : ''}>No</option>
+                    <option value="true" ${adverseKnownValue ? 'selected' : ''}>Sì</option>
+                    <option value="false" ${adverseKnownValue === false ? 'selected' : ''}>No</option>
                 </select>
             </div>
             <div class="col-12">
@@ -2033,12 +2065,24 @@ function renderStep3() {
 function collectStep3Data() {
     const adherence = therapyWizardState.adherence_base || {};
     const general = therapyWizardState.general_anamnesis || {};
+    const detailed = therapyWizardState.detailed_intake || {};
     setIfDefined(adherence, 'current_therapies', getValueIfExists('adCurrentTherapies'));
     setIfDefined(adherence, 'devices_used', getValueIfExists('adDevicesUsed'));
-    setIfDefined(adherence, 'forgets_doses', getValueIfExists('adForgets'));
-    setIfDefined(adherence, 'stops_when_better', toBoolIfDefined(getValueIfExists('adStopsBetter')));
-    setIfDefined(adherence, 'reduces_doses_without_consult', toBoolIfDefined(getValueIfExists('adReduces')));
-    setIfDefined(adherence, 'knows_how_to_use_devices', toBoolIfDefined(getValueIfExists('adKnowDevices')));
+    const forgetsValue = getValueIfExists('adForgets');
+    setIfDefined(adherence, 'forgets_doses', forgetsValue);
+    setLegacyIfValue(detailed, 'forgets_medications', forgetsValue);
+    const stopsBetterRaw = getValueIfExists('adStopsBetter');
+    const stopsBetterValue = toBoolIfDefined(stopsBetterRaw);
+    setIfDefined(adherence, 'stops_when_better', stopsBetterValue);
+    setLegacyIfValue(detailed, 'intentional_skips', stopsBetterValue);
+    const reducesRaw = getValueIfExists('adReduces');
+    const reducesValue = toBoolIfDefined(reducesRaw);
+    setIfDefined(adherence, 'reduces_doses_without_consult', reducesValue);
+    setLegacyIfValue(detailed, 'dose_changes_self_initiated', reducesValue);
+    const knowsDevicesRaw = getValueIfExists('adKnowDevices');
+    const knowsDevicesValue = toBoolIfDefined(knowsDevicesRaw);
+    setIfDefined(adherence, 'knows_how_to_use_devices', knowsDevicesValue);
+    setLegacyIfValue(detailed, 'knows_how_to_use_device', knowsDevicesValue);
     setIfDefined(adherence, 'does_self_monitoring', toBoolIfDefined(getValueIfExists('adSelfMonitoring')));
     setIfDefined(adherence, 'last_check_date', getValueIfExists('adLastCheck'));
     const erVisitsValue = getValueIfExists('adErVisits');
@@ -2046,14 +2090,20 @@ function collectStep3Data() {
         adherence.er_visits_last_year = erVisitsValue;
         general.er_access = erVisitsValue;
     }
-    setIfDefined(adherence, 'known_adverse_reactions', toBoolIfDefined(getValueIfExists('adAdverse')));
+    const adverseRaw = getValueIfExists('adAdverse');
+    const adverseValue = toBoolIfDefined(adverseRaw);
+    setIfDefined(adherence, 'known_adverse_reactions', adverseValue);
     const adverseDetailsValue = getValueIfExists('adAdverseDetails');
     if (adverseDetailsValue !== undefined && String(adverseDetailsValue).trim() !== '') {
-        general.allergies = adverseDetailsValue;
+        if (!general.allergies || general.allergies === adverseDetailsValue) {
+            general.allergies = adverseDetailsValue;
+        }
+        detailed.drug_or_supplement_allergic_reactions = adverseDetailsValue;
     }
     setIfDefined(adherence, 'extra_notes', getValueIfExists('adNotes'));
     therapyWizardState.adherence_base = adherence;
     therapyWizardState.general_anamnesis = general;
+    therapyWizardState.detailed_intake = detailed;
 }
 
 function renderStep4() {

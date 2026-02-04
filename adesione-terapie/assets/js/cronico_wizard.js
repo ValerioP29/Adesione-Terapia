@@ -91,6 +91,22 @@ function toNumberOrNullIfDefined(value) {
     return toNumberOrNull(value);
 }
 
+function normalizeErAccess(value) {
+    if (value === undefined || value === null) return '';
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return '';
+    const numeric = Number.parseInt(raw, 10);
+    if (Number.isFinite(numeric)) {
+        if (numeric <= 0) return 'Nessuno';
+        if (numeric === 1) return '1';
+        return '>1';
+    }
+    if (raw.includes('nessun')) return 'Nessuno';
+    if (raw.includes('>') || raw.includes('piu') || raw.includes('più')) return '>1';
+    if (raw.includes('uno')) return '1';
+    return '';
+}
+
 function loadWizardDraft(therapyId = currentTherapyId) {
     try {
         const raw = localStorage.getItem(getWizardDraftStorageKey(therapyId));
@@ -884,7 +900,6 @@ function renderStep1() {
     const isFemale = patient.gender === 'F';
     const isSmoker = ['si', 'ex'].includes(general.smoking_status);
     const usesSupplements = detailed.uses_supplements === true;
-    const hasIntentionalSkips = detailed.intentional_skips === true;
     const isBpco = primary_condition === 'BPCO';
     const isHypertension = primary_condition === 'Ipertensione';
     const isDiabetes = primary_condition === 'Diabete';
@@ -939,7 +954,7 @@ function renderStep1() {
                     <textarea class="form-control" id="patientNotes" rows="2">${escapeHtml(patient.notes || '')}</textarea>
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Note terapia</label>
+                    <label class="form-label">Note terapia (contesto/obiettivi)</label>
                     <textarea class="form-control" id="therapyNotes" rows="2">${escapeHtml(therapyWizardState.initial_notes || '')}</textarea>
                 </div>
                 <div class="col-md-6">
@@ -1123,14 +1138,6 @@ function renderStep1() {
             <h5 class="mb-3">Anamnesi terapeutica e comportamentale</h5>
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">Allergie (farmaci/lattice/alimenti/vaccini)</label>
-                    <textarea class="form-control" id="anaAllergies" rows="2">${escapeHtml(general.allergies || '')}</textarea>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Accessi PS</label>
-                    <input type="text" class="form-control" id="anaErAccess" value="${escapeHtml(general.er_access || '')}">
-                </div>
-                <div class="col-md-6">
                     <label class="form-label">Esami eseguiti (ECG/Holter)</label>
                     <input type="text" class="form-control" id="anaExams" value="${escapeHtml(general.exams || '')}">
                 </div>
@@ -1155,36 +1162,8 @@ function renderStep1() {
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Modifiche di propria iniziativa</label>
-                    <select class="form-select" id="doseChangesSelf">
-                        <option value="">Seleziona</option>
-                        <option value="true" ${detailed.dose_changes_self_initiated ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${detailed.dose_changes_self_initiated === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
                     <label class="form-label">Tipologia farmaci assunti</label>
                     <input type="text" class="form-control" id="drugTypes" value="${escapeHtml(detailed.drug_types || '')}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Dimenticanze</label>
-                    <input type="text" class="form-control" id="forgetsMeds" value="${escapeHtml(detailed.forgets_medications || '')}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Comportamento quando dimentica</label>
-                    <input type="text" class="form-control" id="behaviourWhenForgets" value="${escapeHtml(detailed.behaviour_when_forgets || '')}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Interruzioni intenzionali</label>
-                    <select class="form-select" id="intentionalSkips">
-                        <option value="">Seleziona</option>
-                        <option value="true" ${detailed.intentional_skips ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${detailed.intentional_skips === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6 ${hasIntentionalSkips ? '' : 'd-none'}" id="intentionalStopReasonWrap">
-                    <label class="form-label">Motivo interruzione</label>
-                    <input type="text" class="form-control" id="intentionalStopReason" value="${escapeHtml(detailed.intentional_stop_reason || '')}">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Uso integratori/omeopatici/fitoterapici</label>
@@ -1210,14 +1189,6 @@ function renderStep1() {
                         <option value="false" ${detailed.uses_bpcop_device === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6 ${isBpco ? '' : 'd-none'}" id="knowsDeviceWrap">
-                    <label class="form-label">Sa usare il device</label>
-                    <select class="form-select" id="knowsDevice">
-                        <option value="">Seleziona</option>
-                        <option value="true" ${detailed.knows_how_to_use_device ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${detailed.knows_how_to_use_device === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
                 <div class="col-md-6 ${isBpco ? '' : 'd-none'}" id="deviceProblemsWrap">
                     <label class="form-label">Problemi device</label>
                     <input type="text" class="form-control" id="deviceProblems" value="${escapeHtml(detailed.device_problems || '')}">
@@ -1240,14 +1211,6 @@ function renderStep1() {
                         <option value="">Seleziona</option>
                         <option value="true" ${detailed.ever_measured_glycemia ? 'selected' : ''}>Sì</option>
                         <option value="false" ${detailed.ever_measured_glycemia === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Reazioni allergiche farmaci/integratori</label>
-                    <select class="form-select" id="drugAllergicReactions">
-                        <option value="">Seleziona</option>
-                        <option value="true" ${detailed.drug_or_supplement_allergic_reactions ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${detailed.drug_or_supplement_allergic_reactions === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
             </div>
@@ -1324,34 +1287,21 @@ function bindStep1Events() {
             setIfDefined(detailed, 'supplements_frequency', '');
         }
 
-        const intentionalSkipsValue = getValueIfExists('intentionalSkips');
-        const hasIntentionalSkips = toBoolIfDefined(intentionalSkipsValue) === true;
-        const intentionalStopReasonWrap = getEl('intentionalStopReasonWrap');
-        if (intentionalStopReasonWrap) intentionalStopReasonWrap.classList.toggle('d-none', !hasIntentionalSkips);
-        if (!hasIntentionalSkips) {
-            const intentionalStopReason = getEl('intentionalStopReason');
-            if (intentionalStopReason) intentionalStopReason.value = '';
-            setIfDefined(detailed, 'intentional_stop_reason', '');
-        }
-
         const currentCondition = getPrimaryConditionFromInputs();
         const isBpco = currentCondition === 'BPCO';
         const isHypertension = currentCondition === 'Ipertensione';
         const isDiabetes = currentCondition === 'Diabete';
-        const bpcoWraps = ['usesBPCODeviceWrap', 'knowsDeviceWrap', 'deviceProblemsWrap'];
+        const bpcoWraps = ['usesBPCODeviceWrap', 'deviceProblemsWrap'];
         bpcoWraps.forEach((id) => {
             const wrap = getEl(id);
             if (wrap) wrap.classList.toggle('d-none', !isBpco);
         });
         if (!isBpco) {
             const usesBPCODevice = getEl('usesBPCODevice');
-            const knowsDevice = getEl('knowsDevice');
             const deviceProblems = getEl('deviceProblems');
             if (usesBPCODevice) usesBPCODevice.value = '';
-            if (knowsDevice) knowsDevice.value = '';
             if (deviceProblems) deviceProblems.value = '';
             setIfDefined(detailed, 'uses_bpcop_device', null);
-            setIfDefined(detailed, 'knows_how_to_use_device', null);
             setIfDefined(detailed, 'device_problems', '');
         }
 
@@ -1402,9 +1352,6 @@ function bindStep1Events() {
 
     const supplementsSelect = getEl('usesSupplements');
     if (supplementsSelect) supplementsSelect.addEventListener('change', updateConditionalFields);
-
-    const intentionalSkipsSelect = getEl('intentionalSkips');
-    if (intentionalSkipsSelect) intentionalSkipsSelect.addEventListener('change', updateConditionalFields);
 
     updateConditionalFields();
 }
@@ -1532,8 +1479,6 @@ function collectStep1Data() {
     setIfDefined(general, 'has_external_support', toBoolIfDefined(getValueIfExists('externalSupport')));
     setIfDefined(general, 'education_level', getValueIfExists('educationLevel'));
     setIfDefined(general, 'has_caregiver', toBoolIfDefined(getValueIfExists('hasCaregiver')));
-    setIfDefined(general, 'allergies', getValueIfExists('anaAllergies'));
-    setIfDefined(general, 'er_access', getValueIfExists('anaErAccess'));
     setIfDefined(general, 'exams', getValueIfExists('anaExams'));
     setIfDefined(general, 'vaccines', getValueIfExists('anaVaccines'));
     setIfDefined(general, 'female_status', getValueIfExists('femaleStatus'));
@@ -1557,22 +1502,15 @@ function collectStep1Data() {
     const detailed = therapyWizardState.detailed_intake || {};
     setIfDefined(detailed, 'has_helper_for_medication', toBoolIfDefined(getValueIfExists('intakeHelper')));
     setIfDefined(detailed, 'dose_changes_last_month', toBoolIfDefined(getValueIfExists('doseChanges')));
-    setIfDefined(detailed, 'dose_changes_self_initiated', toBoolIfDefined(getValueIfExists('doseChangesSelf')));
     setIfDefined(detailed, 'drug_types', getValueIfExists('drugTypes'));
-    setIfDefined(detailed, 'forgets_medications', getValueIfExists('forgetsMeds'));
-    setIfDefined(detailed, 'behaviour_when_forgets', getValueIfExists('behaviourWhenForgets'));
-    setIfDefined(detailed, 'intentional_skips', toBoolIfDefined(getValueIfExists('intentionalSkips')));
-    setIfDefined(detailed, 'intentional_stop_reason', getValueIfExists('intentionalStopReason'));
     setIfDefined(detailed, 'uses_supplements', toBoolIfDefined(getValueIfExists('usesSupplements')));
     setIfDefined(detailed, 'supplements_details', getValueIfExists('supplementsDetails'));
     setIfDefined(detailed, 'supplements_frequency', getValueIfExists('supplementsFrequency'));
     setIfDefined(detailed, 'uses_bpcop_device', toBoolIfDefined(getValueIfExists('usesBPCODevice')));
-    setIfDefined(detailed, 'knows_how_to_use_device', toBoolIfDefined(getValueIfExists('knowsDevice')));
     setIfDefined(detailed, 'device_problems', getValueIfExists('deviceProblems'));
     setIfDefined(detailed, 'uses_self_measure_bp', toBoolIfDefined(getValueIfExists('selfMeasureBP')));
     setIfDefined(detailed, 'pharmacy_bp_frequency', getValueIfExists('pharmacyBPFrequency'));
     setIfDefined(detailed, 'ever_measured_glycemia', toBoolIfDefined(getValueIfExists('everMeasuredGlycemia')));
-    setIfDefined(detailed, 'drug_or_supplement_allergic_reactions', toBoolIfDefined(getValueIfExists('drugAllergicReactions')));
     therapyWizardState.detailed_intake = detailed;
 
     const doctorInfo = therapyWizardState.doctor_info || {};
@@ -1897,6 +1835,9 @@ function renderStep3() {
     const content = document.getElementById('wizardContent');
     if (!content) return;
     const a = therapyWizardState.adherence_base || {};
+    const general = therapyWizardState.general_anamnesis || {};
+    const erVisitsValue = normalizeErAccess(a.er_visits_last_year ?? general.er_access);
+    const adverseDetailsValue = general.allergies || '';
     content.innerHTML = `
         <h5 class="mb-3">Questionario di aderenza base</h5>
         <div class="row g-3">
@@ -1954,21 +1895,25 @@ function renderStep3() {
                 <input type="date" class="form-control" id="adLastCheck" value="${escapeHtml(a.last_check_date || '')}">
             </div>
             <div class="col-md-4">
-                <label class="form-label">Accessi PS/ricoveri ultimo anno</label>
+                <label class="form-label">Accessi PS/ricoveri ultimi 12 mesi</label>
                 <select class="form-select" id="adErVisits">
                     <option value="">Seleziona</option>
-                    <option value="Nessuno" ${a.er_visits_last_year === 'Nessuno' ? 'selected' : ''}>Nessuno</option>
-                    <option value="1" ${a.er_visits_last_year === '1' ? 'selected' : ''}>1</option>
-                    <option value=">1" ${a.er_visits_last_year === '>1' ? 'selected' : ''}>>1</option>
+                    <option value="Nessuno" ${erVisitsValue === 'Nessuno' ? 'selected' : ''}>Nessuno</option>
+                    <option value="1" ${erVisitsValue === '1' ? 'selected' : ''}>1</option>
+                    <option value=">1" ${erVisitsValue === '>1' ? 'selected' : ''}>>1</option>
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Reazioni avverse note?</label>
+                <label class="form-label">Reazioni allergiche/avverse note?</label>
                 <select class="form-select" id="adAdverse">
                     <option value="">Seleziona</option>
                     <option value="true" ${a.known_adverse_reactions ? 'selected' : ''}>Sì</option>
                     <option value="false" ${a.known_adverse_reactions === false ? 'selected' : ''}>No</option>
                 </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Dettaglio reazioni/allergie (opzionale)</label>
+                <textarea class="form-control" id="adAdverseDetails" rows="2">${escapeHtml(adverseDetailsValue)}</textarea>
             </div>
             <div class="col-12">
                 <label class="form-label">Note aggiuntive</label>
@@ -1980,6 +1925,7 @@ function renderStep3() {
 
 function collectStep3Data() {
     const adherence = therapyWizardState.adherence_base || {};
+    const general = therapyWizardState.general_anamnesis || {};
     setIfDefined(adherence, 'current_therapies', getValueIfExists('adCurrentTherapies'));
     setIfDefined(adherence, 'devices_used', getValueIfExists('adDevicesUsed'));
     setIfDefined(adherence, 'forgets_doses', getValueIfExists('adForgets'));
@@ -1988,10 +1934,19 @@ function collectStep3Data() {
     setIfDefined(adherence, 'knows_how_to_use_devices', toBoolIfDefined(getValueIfExists('adKnowDevices')));
     setIfDefined(adherence, 'does_self_monitoring', toBoolIfDefined(getValueIfExists('adSelfMonitoring')));
     setIfDefined(adherence, 'last_check_date', getValueIfExists('adLastCheck'));
-    setIfDefined(adherence, 'er_visits_last_year', getValueIfExists('adErVisits'));
+    const erVisitsValue = getValueIfExists('adErVisits');
+    if (erVisitsValue !== undefined && String(erVisitsValue).trim() !== '') {
+        adherence.er_visits_last_year = erVisitsValue;
+        general.er_access = erVisitsValue;
+    }
     setIfDefined(adherence, 'known_adverse_reactions', toBoolIfDefined(getValueIfExists('adAdverse')));
+    const adverseDetailsValue = getValueIfExists('adAdverseDetails');
+    if (adverseDetailsValue !== undefined && String(adverseDetailsValue).trim() !== '') {
+        general.allergies = adverseDetailsValue;
+    }
     setIfDefined(adherence, 'extra_notes', getValueIfExists('adNotes'));
     therapyWizardState.adherence_base = adherence;
+    therapyWizardState.general_anamnesis = general;
 }
 
 function renderStep4() {
@@ -2092,7 +2047,7 @@ function renderStep5() {
                 <textarea class="form-control" id="educationNotes" rows="3">${escapeHtml(therapyWizardState.flags?.education_notes || '')}</textarea>
             </div>
             <div class="col-12">
-                <label class="form-label">Note iniziali</label>
+                <label class="form-label">Note farmacista / follow-up</label>
                 <textarea class="form-control" id="notesInitial" rows="3">${escapeHtml(therapyWizardState.notes_initial || '')}</textarea>
             </div>
         </div>

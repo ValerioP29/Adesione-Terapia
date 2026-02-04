@@ -54,6 +54,53 @@ function executeQueryWithTypes(PDO $pdo, string $sql, array $params = []) {
     return $stmt;
 }
 
+function isAssocArray($value) {
+    if (!is_array($value)) {
+        return false;
+    }
+    if ($value === []) {
+        return false;
+    }
+    return array_keys($value) !== range(0, count($value) - 1);
+}
+
+function deepMergeArrays(array $base, array $incoming) {
+    $result = $base;
+    foreach ($incoming as $key => $value) {
+        if (is_array($value) && isset($result[$key]) && is_array($result[$key])) {
+            if (isAssocArray($value) && isAssocArray($result[$key])) {
+                $result[$key] = deepMergeArrays($result[$key], $value);
+            } else {
+                $result[$key] = $value;
+            }
+        } else {
+            $result[$key] = $value;
+        }
+    }
+    return $result;
+}
+
+function mergeJsonPayload($existingJson, $incomingValue) {
+    if ($incomingValue === null) {
+        return null;
+    }
+    if (!is_array($incomingValue)) {
+        return json_encode($incomingValue);
+    }
+    if ($incomingValue === []) {
+        return json_encode([]);
+    }
+    $existingArray = [];
+    if (is_string($existingJson) && $existingJson !== '') {
+        $decoded = json_decode($existingJson, true);
+        if (is_array($decoded)) {
+            $existingArray = $decoded;
+        }
+    }
+    $merged = deepMergeArrays($existingArray, $incomingValue);
+    return json_encode($merged);
+}
+
 function upsertInitialFollowupChecklist(PDO $pdo, $therapy_id, $pharmacy_id, $userId, $primary_condition, $condition_survey) {
     ensureTherapyChecklist($pdo, $therapy_id, $pharmacy_id, $primary_condition);
 
@@ -617,28 +664,28 @@ switch ($method) {
             );
 
             $doctorInfoPayload = array_key_exists('doctor_info', $input)
-                ? ($doctor_info ? json_encode($doctor_info) : null)
+                ? mergeJsonPayload($careRow['doctor_info'] ?? null, $doctor_info)
                 : ($careRow['doctor_info'] ?? null);
             $biometricInfoPayload = array_key_exists('biometric_info', $input)
-                ? ($biometric_info ? json_encode($biometric_info) : null)
+                ? mergeJsonPayload($careRow['biometric_info'] ?? null, $biometric_info)
                 : ($careRow['biometric_info'] ?? null);
             $careContextPayload = array_key_exists('care_context', $input)
-                ? ($care_context ? json_encode($care_context) : null)
+                ? mergeJsonPayload($careRow['care_context'] ?? null, $care_context)
                 : ($careRow['care_context'] ?? null);
             $generalAnamnesisPayload = array_key_exists('general_anamnesis', $input)
-                ? ($general_anamnesis ? json_encode($general_anamnesis) : null)
+                ? mergeJsonPayload($careRow['general_anamnesis'] ?? null, $general_anamnesis)
                 : ($careRow['general_anamnesis'] ?? null);
             $detailedIntakePayload = array_key_exists('detailed_intake', $input)
-                ? ($detailed_intake ? json_encode($detailed_intake) : null)
+                ? mergeJsonPayload($careRow['detailed_intake'] ?? null, $detailed_intake)
                 : ($careRow['detailed_intake'] ?? null);
             $adherenceBasePayload = array_key_exists('adherence_base', $input)
-                ? ($adherence_base ? json_encode($adherence_base) : null)
+                ? mergeJsonPayload($careRow['adherence_base'] ?? null, $adherence_base)
                 : ($careRow['adherence_base'] ?? null);
             $flagsPayload = array_key_exists('flags', $input)
-                ? ($flags ? json_encode($flags) : null)
+                ? mergeJsonPayload($careRow['flags'] ?? null, $flags)
                 : ($careRow['flags'] ?? null);
             $consentPayload = array_key_exists('consent', $input)
-                ? ($consent ? json_encode($consent) : null)
+                ? mergeJsonPayload($careRow['consent'] ?? null, $consent)
                 : ($careRow['consent'] ?? null);
             $riskScorePayload = array_key_exists('risk_score', $input) ? $risk_score : ($careRow['risk_score'] ?? null);
             $notesInitialPayload = array_key_exists('notes_initial', $input) ? $notes_initial : ($careRow['notes_initial'] ?? null);

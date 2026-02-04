@@ -59,6 +59,38 @@ function mergeWizardState(defaultState, draftState = {}) {
     };
 }
 
+function getEl(id) {
+    return document.getElementById(id);
+}
+
+function getValueIfExists(id) {
+    const el = getEl(id);
+    if (!el) return undefined;
+    return el.value;
+}
+
+function getCheckedIfExists(id) {
+    const el = getEl(id);
+    if (!el) return undefined;
+    return el.checked;
+}
+
+function setIfDefined(obj, key, value) {
+    if (value !== undefined) {
+        obj[key] = value;
+    }
+}
+
+function toBoolIfDefined(value) {
+    if (value === undefined) return undefined;
+    return toBool(value);
+}
+
+function toNumberOrNullIfDefined(value) {
+    if (value === undefined) return undefined;
+    return toNumberOrNull(value);
+}
+
 function loadWizardDraft(therapyId = currentTherapyId) {
     try {
         const raw = localStorage.getItem(getWizardDraftStorageKey(therapyId));
@@ -849,6 +881,13 @@ function renderStep1() {
 
     const age = patient.birth_date ? calculateAgeFromBirthDate(patient.birth_date) : '';
     const ageLabel = age === '' ? '-' : age;
+    const isFemale = patient.gender === 'F';
+    const isSmoker = ['si', 'ex'].includes(general.smoking_status);
+    const usesSupplements = detailed.uses_supplements === true;
+    const hasIntentionalSkips = detailed.intentional_skips === true;
+    const isBpco = primary_condition === 'BPCO';
+    const isHypertension = primary_condition === 'Ipertensione';
+    const isDiabetes = primary_condition === 'Diabete';
 
     content.innerHTML = `
         <div class="mb-4">
@@ -963,7 +1002,7 @@ function renderStep1() {
                     <label class="form-label">Età</label>
                     <div class="form-control-plaintext" id="patientAgeValue">${escapeHtml(ageLabel)}</div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 ${isFemale ? '' : 'd-none'}" id="femaleStatusWrap">
                     <label class="form-label">Stato ormonale donna</label>
                     <select class="form-select" id="femaleStatus">
                         <option value=""></option>
@@ -989,7 +1028,7 @@ function renderStep1() {
                         <option value="si" ${general.smoking_status === 'si' ? 'selected' : ''}>Sì</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 ${isSmoker ? '' : 'd-none'}" id="cigarettesPerDayWrap">
                     <label class="form-label">Sigarette/giorno</label>
                     <input type="number" class="form-control" id="cigarettesPerDay" value="${escapeHtml(general.cigarettes_per_day || '')}">
                 </div>
@@ -1143,7 +1182,7 @@ function renderStep1() {
                         <option value="false" ${detailed.intentional_skips === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${hasIntentionalSkips ? '' : 'd-none'}" id="intentionalStopReasonWrap">
                     <label class="form-label">Motivo interruzione</label>
                     <input type="text" class="form-control" id="intentionalStopReason" value="${escapeHtml(detailed.intentional_stop_reason || '')}">
                 </div>
@@ -1155,15 +1194,15 @@ function renderStep1() {
                         <option value="false" ${detailed.uses_supplements === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${usesSupplements ? '' : 'd-none'}" id="supplementsDetailsWrap">
                     <label class="form-label">Dettagli integratori</label>
                     <input type="text" class="form-control" id="supplementsDetails" value="${escapeHtml(detailed.supplements_details || '')}">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${usesSupplements ? '' : 'd-none'}" id="supplementsFrequencyWrap">
                     <label class="form-label">Frequenza integratori</label>
                     <input type="text" class="form-control" id="supplementsFrequency" value="${escapeHtml(detailed.supplements_frequency || '')}">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isBpco ? '' : 'd-none'}" id="usesBPCODeviceWrap">
                     <label class="form-label">Uso device BPCO</label>
                     <select class="form-select" id="usesBPCODevice">
                         <option value="">Seleziona</option>
@@ -1171,7 +1210,7 @@ function renderStep1() {
                         <option value="false" ${detailed.uses_bpcop_device === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isBpco ? '' : 'd-none'}" id="knowsDeviceWrap">
                     <label class="form-label">Sa usare il device</label>
                     <select class="form-select" id="knowsDevice">
                         <option value="">Seleziona</option>
@@ -1179,11 +1218,11 @@ function renderStep1() {
                         <option value="false" ${detailed.knows_how_to_use_device === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isBpco ? '' : 'd-none'}" id="deviceProblemsWrap">
                     <label class="form-label">Problemi device</label>
                     <input type="text" class="form-control" id="deviceProblems" value="${escapeHtml(detailed.device_problems || '')}">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isHypertension ? '' : 'd-none'}" id="selfMeasureBPWrap">
                     <label class="form-label">Uso automisurazione pressione</label>
                     <select class="form-select" id="selfMeasureBP">
                         <option value="">Seleziona</option>
@@ -1191,11 +1230,11 @@ function renderStep1() {
                         <option value="false" ${detailed.uses_self_measure_bp === false ? 'selected' : ''}>No</option>
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isHypertension ? '' : 'd-none'}" id="pharmacyBPFrequencyWrap">
                     <label class="form-label">Frequenza in farmacia (pressione)</label>
                     <input type="text" class="form-control" id="pharmacyBPFrequency" value="${escapeHtml(detailed.pharmacy_bp_frequency || '')}">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-6 ${isDiabetes ? '' : 'd-none'}" id="everMeasuredGlycemiaWrap">
                     <label class="form-label">Ha misurato la glicemia</label>
                     <select class="form-select" id="everMeasuredGlycemia">
                         <option value="">Seleziona</option>
@@ -1245,6 +1284,181 @@ function bindStep1Events() {
         birthDateInput.addEventListener('input', updateAgeLabel);
         birthDateInput.addEventListener('change', updateAgeLabel);
     }
+
+    const updateConditionalFields = () => {
+        const general = therapyWizardState.general_anamnesis || {};
+        const detailed = therapyWizardState.detailed_intake || {};
+
+        const genderValue = getValueIfExists('patientGender') || '';
+        const isFemale = genderValue === 'F';
+        const femaleWrap = getEl('femaleStatusWrap');
+        if (femaleWrap) femaleWrap.classList.toggle('d-none', !isFemale);
+        if (!isFemale) {
+            const femaleStatus = getEl('femaleStatus');
+            if (femaleStatus) femaleStatus.value = '';
+            setIfDefined(general, 'female_status', '');
+        }
+
+        const smokingValue = getValueIfExists('smokingStatus') || '';
+        const isSmoker = ['si', 'ex'].includes(smokingValue);
+        const cigarettesWrap = getEl('cigarettesPerDayWrap');
+        if (cigarettesWrap) cigarettesWrap.classList.toggle('d-none', !isSmoker);
+        if (!isSmoker) {
+            const cigarettesPerDay = getEl('cigarettesPerDay');
+            if (cigarettesPerDay) cigarettesPerDay.value = '';
+            setIfDefined(general, 'cigarettes_per_day', null);
+        }
+
+        const usesSupplementsValue = getValueIfExists('usesSupplements');
+        const usesSupplements = toBoolIfDefined(usesSupplementsValue) === true;
+        const supplementsDetailsWrap = getEl('supplementsDetailsWrap');
+        const supplementsFrequencyWrap = getEl('supplementsFrequencyWrap');
+        if (supplementsDetailsWrap) supplementsDetailsWrap.classList.toggle('d-none', !usesSupplements);
+        if (supplementsFrequencyWrap) supplementsFrequencyWrap.classList.toggle('d-none', !usesSupplements);
+        if (!usesSupplements) {
+            const supplementsDetails = getEl('supplementsDetails');
+            const supplementsFrequency = getEl('supplementsFrequency');
+            if (supplementsDetails) supplementsDetails.value = '';
+            if (supplementsFrequency) supplementsFrequency.value = '';
+            setIfDefined(detailed, 'supplements_details', '');
+            setIfDefined(detailed, 'supplements_frequency', '');
+        }
+
+        const intentionalSkipsValue = getValueIfExists('intentionalSkips');
+        const hasIntentionalSkips = toBoolIfDefined(intentionalSkipsValue) === true;
+        const intentionalStopReasonWrap = getEl('intentionalStopReasonWrap');
+        if (intentionalStopReasonWrap) intentionalStopReasonWrap.classList.toggle('d-none', !hasIntentionalSkips);
+        if (!hasIntentionalSkips) {
+            const intentionalStopReason = getEl('intentionalStopReason');
+            if (intentionalStopReason) intentionalStopReason.value = '';
+            setIfDefined(detailed, 'intentional_stop_reason', '');
+        }
+
+        const currentCondition = getPrimaryConditionFromInputs();
+        const isBpco = currentCondition === 'BPCO';
+        const isHypertension = currentCondition === 'Ipertensione';
+        const isDiabetes = currentCondition === 'Diabete';
+        const bpcoWraps = ['usesBPCODeviceWrap', 'knowsDeviceWrap', 'deviceProblemsWrap'];
+        bpcoWraps.forEach((id) => {
+            const wrap = getEl(id);
+            if (wrap) wrap.classList.toggle('d-none', !isBpco);
+        });
+        if (!isBpco) {
+            const usesBPCODevice = getEl('usesBPCODevice');
+            const knowsDevice = getEl('knowsDevice');
+            const deviceProblems = getEl('deviceProblems');
+            if (usesBPCODevice) usesBPCODevice.value = '';
+            if (knowsDevice) knowsDevice.value = '';
+            if (deviceProblems) deviceProblems.value = '';
+            setIfDefined(detailed, 'uses_bpcop_device', null);
+            setIfDefined(detailed, 'knows_how_to_use_device', null);
+            setIfDefined(detailed, 'device_problems', '');
+        }
+
+        const hypertensionWraps = ['selfMeasureBPWrap', 'pharmacyBPFrequencyWrap'];
+        hypertensionWraps.forEach((id) => {
+            const wrap = getEl(id);
+            if (wrap) wrap.classList.toggle('d-none', !isHypertension);
+        });
+        if (!isHypertension) {
+            const selfMeasureBP = getEl('selfMeasureBP');
+            const pharmacyBPFrequency = getEl('pharmacyBPFrequency');
+            if (selfMeasureBP) selfMeasureBP.value = '';
+            if (pharmacyBPFrequency) pharmacyBPFrequency.value = '';
+            setIfDefined(detailed, 'uses_self_measure_bp', null);
+            setIfDefined(detailed, 'pharmacy_bp_frequency', '');
+        }
+
+        const diabetesWrap = getEl('everMeasuredGlycemiaWrap');
+        if (diabetesWrap) diabetesWrap.classList.toggle('d-none', !isDiabetes);
+        if (!isDiabetes) {
+            const everMeasuredGlycemia = getEl('everMeasuredGlycemia');
+            if (everMeasuredGlycemia) everMeasuredGlycemia.value = '';
+            setIfDefined(detailed, 'ever_measured_glycemia', null);
+        }
+
+        therapyWizardState.general_anamnesis = general;
+        therapyWizardState.detailed_intake = detailed;
+    };
+
+    const handlePrimaryConditionChangeAndUpdate = () => {
+        handlePrimaryConditionChange();
+        updateConditionalFields();
+    };
+    const primaryConditionSelect = getEl('primaryCondition');
+    const primaryConditionOther = getEl('primaryConditionOther');
+    if (primaryConditionSelect) {
+        primaryConditionSelect.addEventListener('change', handlePrimaryConditionChangeAndUpdate);
+    }
+    if (primaryConditionOther) {
+        primaryConditionOther.addEventListener('input', handlePrimaryConditionChangeAndUpdate);
+    }
+
+    const genderSelect = getEl('patientGender');
+    if (genderSelect) genderSelect.addEventListener('change', updateConditionalFields);
+
+    const smokingSelect = getEl('smokingStatus');
+    if (smokingSelect) smokingSelect.addEventListener('change', updateConditionalFields);
+
+    const supplementsSelect = getEl('usesSupplements');
+    if (supplementsSelect) supplementsSelect.addEventListener('change', updateConditionalFields);
+
+    const intentionalSkipsSelect = getEl('intentionalSkips');
+    if (intentionalSkipsSelect) intentionalSkipsSelect.addEventListener('change', updateConditionalFields);
+
+    updateConditionalFields();
+}
+
+function getPrimaryConditionFromInputs() {
+    const primary = getValueIfExists('primaryCondition') || '';
+    const other = getValueIfExists('primaryConditionOther') || '';
+    if (primary === 'Altro' && other) return other;
+    return primary || other || '';
+}
+
+function applyPrimaryConditionToInputs(value) {
+    const select = getEl('primaryCondition');
+    const otherInput = getEl('primaryConditionOther');
+    const allowed = ['Diabete', 'BPCO', 'Ipertensione', 'Dislipidemia', 'Altro'];
+    if (!select || !otherInput) return;
+    if (!value) {
+        select.value = '';
+        otherInput.value = '';
+        return;
+    }
+    if (allowed.includes(value)) {
+        select.value = value;
+        otherInput.value = '';
+    } else {
+        select.value = 'Altro';
+        otherInput.value = value;
+    }
+}
+
+function handlePrimaryConditionChange() {
+    const previous = therapyWizardState.primary_condition || '';
+    const nextValue = getPrimaryConditionFromInputs();
+    if (!previous || previous === nextValue) {
+        return;
+    }
+    const existingAnswers = therapyWizardState.condition_survey?.answers || {};
+    const hasSurveyAnswers = Object.values(existingAnswers).some((val) => val !== '' && val !== null && val !== undefined);
+    if (!hasSurveyAnswers) {
+        therapyWizardState.primary_condition = nextValue || null;
+        return;
+    }
+    const confirmed = confirm('Hai modificato la patologia: vuoi resettare le risposte del questionario specifico?');
+    if (confirmed) {
+        therapyWizardState.condition_survey = {
+            ...therapyWizardState.condition_survey,
+            condition_type: nextValue || null,
+            answers: {},
+            compiled_at: null
+        };
+        therapyWizardState.primary_condition = nextValue || null;
+    } else {
+        applyPrimaryConditionToInputs(previous);
+    }
 }
 
 async function searchPatients() {
@@ -1286,79 +1500,91 @@ async function searchPatients() {
 
 function collectStep1Data() {
     const patient = therapyWizardState.patient || {};
-    patient.first_name = document.getElementById('patientFirstName')?.value?.trim() || '';
-    patient.last_name = document.getElementById('patientLastName')?.value?.trim() || '';
-    patient.birth_date = document.getElementById('patientBirthDate')?.value || '';
-    patient.codice_fiscale = document.getElementById('patientCF')?.value?.trim() || '';
-    patient.phone = document.getElementById('patientPhone')?.value?.trim() || '';
-    patient.email = document.getElementById('patientEmail')?.value?.trim() || '';
-    patient.notes = document.getElementById('patientNotes')?.value || '';
-    patient.gender = document.getElementById('patientGender')?.value || '';
+    const firstName = getValueIfExists('patientFirstName');
+    setIfDefined(patient, 'first_name', firstName !== undefined ? firstName.trim() : undefined);
+    const lastName = getValueIfExists('patientLastName');
+    setIfDefined(patient, 'last_name', lastName !== undefined ? lastName.trim() : undefined);
+    setIfDefined(patient, 'birth_date', getValueIfExists('patientBirthDate'));
+    const cfValue = getValueIfExists('patientCF');
+    setIfDefined(patient, 'codice_fiscale', cfValue !== undefined ? cfValue.trim() : undefined);
+    const phoneValue = getValueIfExists('patientPhone');
+    setIfDefined(patient, 'phone', phoneValue !== undefined ? phoneValue.trim() : undefined);
+    const emailValue = getValueIfExists('patientEmail');
+    setIfDefined(patient, 'email', emailValue !== undefined ? emailValue.trim() : undefined);
+    setIfDefined(patient, 'notes', getValueIfExists('patientNotes'));
+    setIfDefined(patient, 'gender', getValueIfExists('patientGender'));
     therapyWizardState.patient = patient;
 
-    therapyWizardState.initial_notes = document.getElementById('therapyNotes')?.value || '';
-    const primary = document.getElementById('primaryCondition')?.value || '';
-    const other = document.getElementById('primaryConditionOther')?.value || '';
-    therapyWizardState.primary_condition = primary === 'Altro' && other ? other : (primary || other || null);
+    const therapyNotes = getValueIfExists('therapyNotes');
+    if (therapyNotes !== undefined) {
+        therapyWizardState.initial_notes = therapyNotes;
+    }
+    const primaryValue = getValueIfExists('primaryCondition');
+    const otherValue = getValueIfExists('primaryConditionOther');
+    if (primaryValue !== undefined || otherValue !== undefined) {
+        const primary = primaryValue || '';
+        const other = otherValue || '';
+        therapyWizardState.primary_condition = primary === 'Altro' && other ? other : (primary || other || null);
+    }
 
-    therapyWizardState.general_anamnesis = {
-        family_members_count: toNumberOrNull(document.getElementById('familyMembers')?.value),
-        has_external_support: toBool(document.getElementById('externalSupport')?.value),
-        education_level: document.getElementById('educationLevel')?.value || '',
-        has_caregiver: toBool(document.getElementById('hasCaregiver')?.value),
-        allergies: document.getElementById('anaAllergies')?.value || '',
-        er_access: document.getElementById('anaErAccess')?.value || '',
-        exams: document.getElementById('anaExams')?.value || '',
-        vaccines: document.getElementById('anaVaccines')?.value || '',
-        female_status: document.getElementById('femaleStatus')?.value || '',
-        self_rated_health: document.getElementById('selfRatedHealth')?.value || '',
-        smoking_status: document.getElementById('smokingStatus')?.value || '',
-        cigarettes_per_day: toNumberOrNull(document.getElementById('cigarettesPerDay')?.value),
-        physical_activity_regular: toBool(document.getElementById('physicalActivity')?.value),
-        diet_control: document.getElementById('dietControl')?.value || '',
-        chronic_therapy_regimen: document.getElementById('chronicTherapy')?.value || '',
-        therapy_management_difficulty: document.getElementById('therapyDifficulty')?.value || '',
-        diagnosed_conditions: {
-            diabete: !!document.getElementById('condDiabete')?.checked,
-            ipertensione: !!document.getElementById('condIpertensione')?.checked,
-            bpco: !!document.getElementById('condBpco')?.checked,
-            dislipidemia: !!document.getElementById('condDislipidemia')?.checked,
-            altro: document.getElementById('condAltro')?.value || ''
-        },
-        family_history_cvd: document.getElementById('familyHistoryCvd')?.value || ''
-    };
+    const general = therapyWizardState.general_anamnesis || {};
+    setIfDefined(general, 'family_members_count', toNumberOrNullIfDefined(getValueIfExists('familyMembers')));
+    setIfDefined(general, 'has_external_support', toBoolIfDefined(getValueIfExists('externalSupport')));
+    setIfDefined(general, 'education_level', getValueIfExists('educationLevel'));
+    setIfDefined(general, 'has_caregiver', toBoolIfDefined(getValueIfExists('hasCaregiver')));
+    setIfDefined(general, 'allergies', getValueIfExists('anaAllergies'));
+    setIfDefined(general, 'er_access', getValueIfExists('anaErAccess'));
+    setIfDefined(general, 'exams', getValueIfExists('anaExams'));
+    setIfDefined(general, 'vaccines', getValueIfExists('anaVaccines'));
+    setIfDefined(general, 'female_status', getValueIfExists('femaleStatus'));
+    setIfDefined(general, 'self_rated_health', getValueIfExists('selfRatedHealth'));
+    setIfDefined(general, 'smoking_status', getValueIfExists('smokingStatus'));
+    setIfDefined(general, 'cigarettes_per_day', toNumberOrNullIfDefined(getValueIfExists('cigarettesPerDay')));
+    setIfDefined(general, 'physical_activity_regular', toBoolIfDefined(getValueIfExists('physicalActivity')));
+    setIfDefined(general, 'diet_control', getValueIfExists('dietControl'));
+    setIfDefined(general, 'chronic_therapy_regimen', getValueIfExists('chronicTherapy'));
+    setIfDefined(general, 'therapy_management_difficulty', getValueIfExists('therapyDifficulty'));
+    const diagnosed = general.diagnosed_conditions || {};
+    setIfDefined(diagnosed, 'diabete', getCheckedIfExists('condDiabete'));
+    setIfDefined(diagnosed, 'ipertensione', getCheckedIfExists('condIpertensione'));
+    setIfDefined(diagnosed, 'bpco', getCheckedIfExists('condBpco'));
+    setIfDefined(diagnosed, 'dislipidemia', getCheckedIfExists('condDislipidemia'));
+    setIfDefined(diagnosed, 'altro', getValueIfExists('condAltro'));
+    general.diagnosed_conditions = diagnosed;
+    setIfDefined(general, 'family_history_cvd', getValueIfExists('familyHistoryCvd'));
+    therapyWizardState.general_anamnesis = general;
 
-    therapyWizardState.detailed_intake = {
-        has_helper_for_medication: toBool(document.getElementById('intakeHelper')?.value),
-        dose_changes_last_month: toBool(document.getElementById('doseChanges')?.value),
-        dose_changes_self_initiated: toBool(document.getElementById('doseChangesSelf')?.value),
-        drug_types: document.getElementById('drugTypes')?.value || '',
-        forgets_medications: document.getElementById('forgetsMeds')?.value || '',
-        behaviour_when_forgets: document.getElementById('behaviourWhenForgets')?.value || '',
-        intentional_skips: toBool(document.getElementById('intentionalSkips')?.value),
-        intentional_stop_reason: document.getElementById('intentionalStopReason')?.value || '',
-        uses_supplements: toBool(document.getElementById('usesSupplements')?.value),
-        supplements_details: document.getElementById('supplementsDetails')?.value || '',
-        supplements_frequency: document.getElementById('supplementsFrequency')?.value || '',
-        uses_bpcop_device: toBool(document.getElementById('usesBPCODevice')?.value),
-        knows_how_to_use_device: toBool(document.getElementById('knowsDevice')?.value),
-        device_problems: document.getElementById('deviceProblems')?.value || '',
-        uses_self_measure_bp: toBool(document.getElementById('selfMeasureBP')?.value),
-        pharmacy_bp_frequency: document.getElementById('pharmacyBPFrequency')?.value || '',
-        ever_measured_glycemia: toBool(document.getElementById('everMeasuredGlycemia')?.value),
-        drug_or_supplement_allergic_reactions: toBool(document.getElementById('drugAllergicReactions')?.value)
-    };
+    const detailed = therapyWizardState.detailed_intake || {};
+    setIfDefined(detailed, 'has_helper_for_medication', toBoolIfDefined(getValueIfExists('intakeHelper')));
+    setIfDefined(detailed, 'dose_changes_last_month', toBoolIfDefined(getValueIfExists('doseChanges')));
+    setIfDefined(detailed, 'dose_changes_self_initiated', toBoolIfDefined(getValueIfExists('doseChangesSelf')));
+    setIfDefined(detailed, 'drug_types', getValueIfExists('drugTypes'));
+    setIfDefined(detailed, 'forgets_medications', getValueIfExists('forgetsMeds'));
+    setIfDefined(detailed, 'behaviour_when_forgets', getValueIfExists('behaviourWhenForgets'));
+    setIfDefined(detailed, 'intentional_skips', toBoolIfDefined(getValueIfExists('intentionalSkips')));
+    setIfDefined(detailed, 'intentional_stop_reason', getValueIfExists('intentionalStopReason'));
+    setIfDefined(detailed, 'uses_supplements', toBoolIfDefined(getValueIfExists('usesSupplements')));
+    setIfDefined(detailed, 'supplements_details', getValueIfExists('supplementsDetails'));
+    setIfDefined(detailed, 'supplements_frequency', getValueIfExists('supplementsFrequency'));
+    setIfDefined(detailed, 'uses_bpcop_device', toBoolIfDefined(getValueIfExists('usesBPCODevice')));
+    setIfDefined(detailed, 'knows_how_to_use_device', toBoolIfDefined(getValueIfExists('knowsDevice')));
+    setIfDefined(detailed, 'device_problems', getValueIfExists('deviceProblems'));
+    setIfDefined(detailed, 'uses_self_measure_bp', toBoolIfDefined(getValueIfExists('selfMeasureBP')));
+    setIfDefined(detailed, 'pharmacy_bp_frequency', getValueIfExists('pharmacyBPFrequency'));
+    setIfDefined(detailed, 'ever_measured_glycemia', toBoolIfDefined(getValueIfExists('everMeasuredGlycemia')));
+    setIfDefined(detailed, 'drug_or_supplement_allergic_reactions', toBoolIfDefined(getValueIfExists('drugAllergicReactions')));
+    therapyWizardState.detailed_intake = detailed;
 
-    therapyWizardState.doctor_info = {
-        gp_reference: document.getElementById('gpReference')?.value || '',
-        specialist_reference: document.getElementById('specialistReference')?.value || ''
-    };
+    const doctorInfo = therapyWizardState.doctor_info || {};
+    setIfDefined(doctorInfo, 'gp_reference', getValueIfExists('gpReference'));
+    setIfDefined(doctorInfo, 'specialist_reference', getValueIfExists('specialistReference'));
+    therapyWizardState.doctor_info = doctorInfo;
 
-    therapyWizardState.biometric_info = {
-        weight_kg: toNumberOrNull(document.getElementById('bioWeight')?.value),
-        height_cm: toNumberOrNull(document.getElementById('bioHeight')?.value),
-        bmi: toNumberOrNull(document.getElementById('bioBmi')?.value)
-    };
+    const biometric = therapyWizardState.biometric_info || {};
+    setIfDefined(biometric, 'weight_kg', toNumberOrNullIfDefined(getValueIfExists('bioWeight')));
+    setIfDefined(biometric, 'height_cm', toNumberOrNullIfDefined(getValueIfExists('bioHeight')));
+    setIfDefined(biometric, 'bmi', toNumberOrNullIfDefined(getValueIfExists('bioBmi')));
+    therapyWizardState.biometric_info = biometric;
 }
 
 function collectStep2Data() {
@@ -1753,19 +1979,19 @@ function renderStep3() {
 }
 
 function collectStep3Data() {
-    therapyWizardState.adherence_base = {
-        current_therapies: document.getElementById('adCurrentTherapies')?.value || '',
-        devices_used: document.getElementById('adDevicesUsed')?.value || '',
-        forgets_doses: document.getElementById('adForgets')?.value || '',
-        stops_when_better: toBool(document.getElementById('adStopsBetter')?.value),
-        reduces_doses_without_consult: toBool(document.getElementById('adReduces')?.value),
-        knows_how_to_use_devices: toBool(document.getElementById('adKnowDevices')?.value),
-        does_self_monitoring: toBool(document.getElementById('adSelfMonitoring')?.value),
-        last_check_date: document.getElementById('adLastCheck')?.value || '',
-        er_visits_last_year: document.getElementById('adErVisits')?.value || '',
-        known_adverse_reactions: toBool(document.getElementById('adAdverse')?.value),
-        extra_notes: document.getElementById('adNotes')?.value || ''
-    };
+    const adherence = therapyWizardState.adherence_base || {};
+    setIfDefined(adherence, 'current_therapies', getValueIfExists('adCurrentTherapies'));
+    setIfDefined(adherence, 'devices_used', getValueIfExists('adDevicesUsed'));
+    setIfDefined(adherence, 'forgets_doses', getValueIfExists('adForgets'));
+    setIfDefined(adherence, 'stops_when_better', toBoolIfDefined(getValueIfExists('adStopsBetter')));
+    setIfDefined(adherence, 'reduces_doses_without_consult', toBoolIfDefined(getValueIfExists('adReduces')));
+    setIfDefined(adherence, 'knows_how_to_use_devices', toBoolIfDefined(getValueIfExists('adKnowDevices')));
+    setIfDefined(adherence, 'does_self_monitoring', toBoolIfDefined(getValueIfExists('adSelfMonitoring')));
+    setIfDefined(adherence, 'last_check_date', getValueIfExists('adLastCheck'));
+    setIfDefined(adherence, 'er_visits_last_year', getValueIfExists('adErVisits'));
+    setIfDefined(adherence, 'known_adverse_reactions', toBoolIfDefined(getValueIfExists('adAdverse')));
+    setIfDefined(adherence, 'extra_notes', getValueIfExists('adNotes'));
+    therapyWizardState.adherence_base = adherence;
 }
 
 function renderStep4() {
@@ -1803,14 +2029,8 @@ function renderStep4() {
     content.innerHTML = `
         <h5 class="mb-3">Questionario specifico patologia</h5>
         <div class="mb-3">
-            <label class="form-label">Patologia</label>
-            <select class="form-select" id="surveyCondition">
-                <option value="Diabete" ${condition === 'Diabete' ? 'selected' : ''}>Diabete</option>
-                <option value="BPCO" ${condition === 'BPCO' ? 'selected' : ''}>BPCO</option>
-                <option value="Ipertensione" ${condition === 'Ipertensione' ? 'selected' : ''}>Ipertensione</option>
-                <option value="Dislipidemia" ${condition === 'Dislipidemia' ? 'selected' : ''}>Dislipidemia</option>
-                <option value="Altro" ${condition === 'Altro' ? 'selected' : ''}>Altro</option>
-            </select>
+            <label class="form-label">Questionario</label>
+            <div class="form-control-plaintext">${escapeHtml(condition || 'Seleziona la patologia nello step 1')}</div>
         </div>
         <div class="mb-3">
             <label class="form-label">Domande specifiche</label>
@@ -1823,15 +2043,6 @@ function renderStep4() {
             <input type="text" class="form-control" id="compiledAt" value="${escapeHtml(compiledAt)}">
         </div>
     `;
-
-    const conditionSelect = document.getElementById('surveyCondition');
-    if (conditionSelect) {
-        conditionSelect.addEventListener('change', () => {
-            // Re-render to load the appropriate template while keeping current answers
-            collectStep4Data();
-            renderStep4();
-        });
-    }
 }
 
 function collectStep4Data() {
@@ -1842,10 +2053,10 @@ function collectStep4Data() {
         answers[key] = input.value;
     });
     therapyWizardState.condition_survey = {
-        condition_type: document.getElementById('surveyCondition')?.value || therapyWizardState.primary_condition,
+        condition_type: therapyWizardState.primary_condition,
         level: 'base',
         answers,
-        compiled_at: document.getElementById('compiledAt')?.value || new Date().toISOString().slice(0, 19).replace('T', ' ')
+        compiled_at: getValueIfExists('compiledAt') || new Date().toISOString().slice(0, 19).replace('T', ' ')
     };
 }
 
@@ -1854,6 +2065,10 @@ function renderStep5() {
     if (!content) return;
     const flags = therapyWizardState.flags || {};
     const feedback = flags.caregiver_feedback || {};
+    const hasCaregiver =
+        therapyWizardState.general_anamnesis?.has_caregiver === true
+        || (therapyWizardState.therapy_assistants || []).length > 0;
+    const showCaregiverBlock = hasCaregiver;
     const wantsReport = feedback.wants_monthly_report === true
         || feedback.wants_monthly_report === 'true'
         || feedback.wants_monthly_report === 'email'
@@ -1881,7 +2096,7 @@ function renderStep5() {
                 <textarea class="form-control" id="notesInitial" rows="3">${escapeHtml(therapyWizardState.notes_initial || '')}</textarea>
             </div>
         </div>
-        <div class="mt-4">
+        <div class="mt-4 ${showCaregiverBlock ? '' : 'd-none'}" id="caregiverBlock">
             <h6 class="mb-2">Per il Caregiver</h6>
             <div class="row g-3 mt-2">
                 <div class="col-md-6">
@@ -1931,34 +2146,109 @@ function renderStep5() {
             reportChannelWrap.classList.toggle('d-none', wantsReportSelect.value !== 'true');
         });
     }
+
+    if (!showCaregiverBlock) {
+        clearCaregiverFlags(false);
+    }
+}
+
+function clearCaregiverFlags(updateState = false) {
+    const caregiverFields = [
+        'caregiverWantsReport',
+        'caregiverReportChannel',
+        'caregiverAllowDoctor',
+        'caregiverAllowPickup',
+        'caregiverNotes'
+    ];
+    caregiverFields.forEach((id) => {
+        const el = getEl(id);
+        if (!el) return;
+        if (el.tagName === 'SELECT') {
+            el.value = '';
+        } else {
+            el.value = '';
+        }
+    });
+    if (updateState) {
+        const existingFlags = therapyWizardState.flags || {};
+        const existingFeedback = existingFlags.caregiver_feedback || {};
+        therapyWizardState.flags = {
+            ...existingFlags,
+            caregiver_extra_notes: '',
+            caregiver_feedback: {
+                ...existingFeedback,
+                wants_monthly_report: '',
+                allow_doctor_interaction: null,
+                allow_prescription_pickup: null
+            }
+        };
+    }
 }
 
 function collectStep5Data() {
-    therapyWizardState.risk_score = toNumberOrNull(document.getElementById('riskScore')?.value);
-    therapyWizardState.notes_initial = document.getElementById('notesInitial')?.value || '';
+    const riskScoreValue = getValueIfExists('riskScore');
+    if (riskScoreValue !== undefined) {
+        therapyWizardState.risk_score = toNumberOrNull(riskScoreValue);
+    }
+    const notesInitialValue = getValueIfExists('notesInitial');
+    if (notesInitialValue !== undefined) {
+        therapyWizardState.notes_initial = notesInitialValue;
+    }
     const existingFlags = therapyWizardState.flags || {};
     const existingFeedback = existingFlags.caregiver_feedback || {};
-    const wantsReportValue = document.getElementById('caregiverWantsReport')?.value || '';
-    const reportChannelValue = document.getElementById('caregiverReportChannel')?.value || '';
-    const wantsReport = wantsReportValue === 'true';
-    let wantsMonthlyReport = existingFeedback.wants_monthly_report || '';
-    if (wantsReportValue === 'false') {
-        wantsMonthlyReport = 'none';
-    } else if (wantsReport) {
-        wantsMonthlyReport = reportChannelValue || wantsMonthlyReport || 'email';
+    const criticalIssuesValue = getValueIfExists('criticalIssues');
+    const educationNotesValue = getValueIfExists('educationNotes');
+
+    const hasCaregiver =
+        therapyWizardState.general_anamnesis?.has_caregiver === true
+        || (therapyWizardState.therapy_assistants || []).length > 0;
+
+    let caregiverExtraNotes = existingFlags.caregiver_extra_notes ?? '';
+    let caregiverFeedback = { ...existingFeedback };
+
+    if (hasCaregiver) {
+        const wantsReportValue = getValueIfExists('caregiverWantsReport');
+        const reportChannelValue = getValueIfExists('caregiverReportChannel');
+        const wantsReport = wantsReportValue === 'true';
+        let wantsMonthlyReport = existingFeedback.wants_monthly_report || '';
+        if (wantsReportValue === 'false') {
+            wantsMonthlyReport = 'none';
+        } else if (wantsReport) {
+            wantsMonthlyReport = reportChannelValue || wantsMonthlyReport || 'email';
+        }
+
+        if (wantsReportValue !== undefined) {
+            caregiverFeedback = {
+                ...caregiverFeedback,
+                wants_monthly_report: wantsMonthlyReport
+            };
+        }
+
+        const allowDoctorValue = getValueIfExists('caregiverAllowDoctor');
+        const allowPickupValue = getValueIfExists('caregiverAllowPickup');
+        setIfDefined(caregiverFeedback, 'allow_doctor_interaction', toBoolIfDefined(allowDoctorValue));
+        setIfDefined(caregiverFeedback, 'allow_prescription_pickup', toBoolIfDefined(allowPickupValue));
+
+        const caregiverNotesValue = getValueIfExists('caregiverNotes');
+        if (caregiverNotesValue !== undefined) {
+            caregiverExtraNotes = caregiverNotesValue;
+        }
+    } else {
+        caregiverExtraNotes = '';
+        caregiverFeedback = {
+            ...caregiverFeedback,
+            wants_monthly_report: '',
+            allow_doctor_interaction: null,
+            allow_prescription_pickup: null
+        };
     }
-    const caregiverNotesValue = document.getElementById('caregiverNotes')?.value;
+
     therapyWizardState.flags = {
         ...existingFlags,
-        critical_issues: document.getElementById('criticalIssues')?.value || '',
-        education_notes: document.getElementById('educationNotes')?.value || '',
-        caregiver_extra_notes: caregiverNotesValue ?? existingFlags.caregiver_extra_notes ?? '',
-        caregiver_feedback: {
-            ...existingFeedback,
-            wants_monthly_report: wantsMonthlyReport,
-            allow_doctor_interaction: toBool(document.getElementById('caregiverAllowDoctor')?.value),
-            allow_prescription_pickup: toBool(document.getElementById('caregiverAllowPickup')?.value)
-        }
+        ...(criticalIssuesValue !== undefined ? { critical_issues: criticalIssuesValue } : {}),
+        ...(educationNotesValue !== undefined ? { education_notes: educationNotesValue } : {}),
+        caregiver_extra_notes: caregiverExtraNotes,
+        caregiver_feedback: caregiverFeedback
     };
 }
 
@@ -2033,34 +2323,44 @@ function renderStep6() {
 }
 
 function collectStep6Data() {
-    const gdprCareFollowup = document.getElementById('consentCareFollowup')?.checked || false;
-    const gdprContact = document.getElementById('consentContact')?.checked || false;
-    const gdprAnonymous = document.getElementById('consentAnonymous')?.checked || false;
-    const signedAtRaw = document.getElementById('signedAt')?.value || '';
+    const gdprCareFollowup = getCheckedIfExists('consentCareFollowup');
+    const gdprContact = getCheckedIfExists('consentContact');
+    const gdprAnonymous = getCheckedIfExists('consentAnonymous');
+    const signedAtRaw = getValueIfExists('signedAt');
 
     const previousConsent = therapyWizardState.consent || {};
     const previousScopes = previousConsent.scopes || {};
 
-    therapyWizardState.consent = {
+    const scopes = { ...previousScopes };
+    setIfDefined(scopes, 'care_followup', gdprCareFollowup);
+    setIfDefined(scopes, 'contact_for_reminders', gdprContact);
+    setIfDefined(scopes, 'anonymous_stats', gdprAnonymous);
+    if (gdprCareFollowup !== undefined && gdprContact !== undefined && gdprAnonymous !== undefined) {
+        scopes.gdpr_accepted = gdprCareFollowup && gdprContact && gdprAnonymous;
+    }
+
+    const consentPayload = {
         ...previousConsent,
-        signer_name: document.getElementById('signerName')?.value || '',
-        signer_relation: 'patient',
-        signed_at: signedAtRaw || '',
-        pharmacist_name: document.getElementById('pharmacistName')?.value || '',
-        place: document.getElementById('consentPlace')?.value || '',
-        scopes: {
-            ...previousScopes,
-            care_followup: gdprCareFollowup,
-            contact_for_reminders: gdprContact,
-            anonymous_stats: gdprAnonymous,
-            gdpr_accepted: gdprCareFollowup && gdprContact && gdprAnonymous
-        },
+        scopes,
         signatures: {
             patient_data_url: getSignatureDataUrl('patientSignatureCanvas'),
             pharmacist_data_url: getSignatureDataUrl('pharmacistSignatureCanvas')
         },
         signer_role: ''
     };
+
+    const signerName = getValueIfExists('signerName');
+    setIfDefined(consentPayload, 'signer_name', signerName);
+    const pharmacistName = getValueIfExists('pharmacistName');
+    setIfDefined(consentPayload, 'pharmacist_name', pharmacistName);
+    const consentPlace = getValueIfExists('consentPlace');
+    setIfDefined(consentPayload, 'place', consentPlace);
+    if (signedAtRaw !== undefined) {
+        consentPayload.signed_at = signedAtRaw || '';
+    }
+    consentPayload.signer_relation = 'patient';
+
+    therapyWizardState.consent = consentPayload;
 }
 
 function assemblePayload() {

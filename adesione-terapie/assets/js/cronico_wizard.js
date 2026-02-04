@@ -1559,6 +1559,49 @@ function collectStep2Data() {
         return true;
     });
     therapyWizardState.assistant_draft = hasDraft ? assistantDraft : null;
+
+    const hasCaregiver =
+        therapyWizardState.general_anamnesis?.has_caregiver === true
+        || (therapyWizardState.therapy_assistants || []).length > 0;
+
+    if (hasCaregiver) {
+        const existingFlags = therapyWizardState.flags || {};
+        const existingFeedback = existingFlags.caregiver_feedback || {};
+        const wantsReportValue = getValueIfExists('caregiverWantsReport');
+        const reportChannelValue = getValueIfExists('caregiverReportChannel');
+        const wantsReport = wantsReportValue === 'true';
+        let wantsMonthlyReport = existingFeedback.wants_monthly_report || '';
+        if (wantsReportValue === 'false') {
+            wantsMonthlyReport = 'none';
+        } else if (wantsReport) {
+            wantsMonthlyReport = reportChannelValue || wantsMonthlyReport || 'email';
+        }
+
+        let caregiverFeedback = { ...existingFeedback };
+        if (wantsReportValue !== undefined) {
+            caregiverFeedback = {
+                ...caregiverFeedback,
+                wants_monthly_report: wantsMonthlyReport
+            };
+        }
+
+        const allowDoctorValue = getValueIfExists('caregiverAllowDoctor');
+        const allowPickupValue = getValueIfExists('caregiverAllowPickup');
+        setIfDefined(caregiverFeedback, 'allow_doctor_interaction', toBoolIfDefined(allowDoctorValue));
+        setIfDefined(caregiverFeedback, 'allow_prescription_pickup', toBoolIfDefined(allowPickupValue));
+
+        let caregiverExtraNotes = existingFlags.caregiver_extra_notes ?? '';
+        const caregiverNotesValue = getValueIfExists('caregiverNotes');
+        if (caregiverNotesValue !== undefined) {
+            caregiverExtraNotes = caregiverNotesValue;
+        }
+
+        therapyWizardState.flags = {
+            ...existingFlags,
+            caregiver_extra_notes: caregiverExtraNotes,
+            caregiver_feedback: caregiverFeedback
+        };
+    }
 }
 
 function renderStep2() {
@@ -1568,6 +1611,19 @@ function renderStep2() {
     const assistants = therapyWizardState.therapy_assistants || [];
     const assistantDraft = therapyWizardState.assistant_draft || {};
     const hasAssistantDraft = Object.values(assistantDraft).some((value) => value);
+    const flags = therapyWizardState.flags || {};
+    const feedback = flags.caregiver_feedback || {};
+    const hasCaregiver =
+        therapyWizardState.general_anamnesis?.has_caregiver === true
+        || (therapyWizardState.therapy_assistants || []).length > 0;
+    const showCaregiverBlock = hasCaregiver;
+    const wantsReport = feedback.wants_monthly_report === true
+        || feedback.wants_monthly_report === 'true'
+        || feedback.wants_monthly_report === 'email'
+        || feedback.wants_monthly_report === 'whatsapp';
+    const reportChannel = feedback.wants_monthly_report === 'email' || feedback.wants_monthly_report === 'whatsapp'
+        ? feedback.wants_monthly_report
+        : (wantsReport ? 'email' : '');
 
     content.innerHTML = `
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1629,6 +1685,48 @@ function renderStep2() {
                 <button type="button" class="btn btn-primary" id="saveAssistantBtn">Salva</button>
             </div>
         </div>
+
+        <div class="mt-4 ${showCaregiverBlock ? '' : 'd-none'}" id="caregiverBlock">
+            <h6 class="mb-2">Per il Caregiver</h6>
+            <div class="row g-3 mt-2">
+                <div class="col-md-6">
+                    <label class="form-label">È interessato a ricevere un REPORT mensile sullo stato di salute del suo familiare?</label>
+                    <select class="form-select" id="caregiverWantsReport">
+                        <option value="" ${feedback.wants_monthly_report === null || feedback.wants_monthly_report === undefined || feedback.wants_monthly_report === '' ? 'selected' : ''}>Non specificato</option>
+                        <option value="true" ${wantsReport ? 'selected' : ''}>Sì</option>
+                        <option value="false" ${feedback.wants_monthly_report === 'none' || feedback.wants_monthly_report === false || feedback.wants_monthly_report === 'false' ? 'selected' : ''}>No</option>
+                    </select>
+                </div>
+                <div class="col-md-6 ${wantsReport ? '' : 'd-none'}" id="caregiverReportChannelWrap">
+                    <label class="form-label">Canale report</label>
+                    <select class="form-select" id="caregiverReportChannel">
+                        <option value="" ${!reportChannel ? 'selected' : ''}>Seleziona</option>
+                        <option value="email" ${reportChannel === 'email' ? 'selected' : ''}>Email</option>
+                        <option value="whatsapp" ${reportChannel === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">È favorevole ad autorizzare la farmacia a interagire con il medico curante del suo familiare?</label>
+                    <select class="form-select" id="caregiverAllowDoctor">
+                        <option value="" ${feedback.allow_doctor_interaction === null || feedback.allow_doctor_interaction === undefined ? 'selected' : ''}>Non specificato</option>
+                        <option value="true" ${feedback.allow_doctor_interaction === true ? 'selected' : ''}>Sì</option>
+                        <option value="false" ${feedback.allow_doctor_interaction === false ? 'selected' : ''}>No</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">È favorevole ad autorizzare questa farmacia al ritiro di ricette e referti presso lo studio medico del familiare?</label>
+                    <select class="form-select" id="caregiverAllowPickup">
+                        <option value="" ${feedback.allow_prescription_pickup === null || feedback.allow_prescription_pickup === undefined ? 'selected' : ''}>Non specificato</option>
+                        <option value="true" ${feedback.allow_prescription_pickup === true ? 'selected' : ''}>Sì</option>
+                        <option value="false" ${feedback.allow_prescription_pickup === false ? 'selected' : ''}>No</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="form-label">Note dal caregiver / informazioni aggiuntive</label>
+                <textarea class="form-control" id="caregiverNotes" rows="3">${escapeHtml(flags.caregiver_extra_notes || '')}</textarea>
+            </div>
+        </div>
     `;
 
     fetchAssistants();
@@ -1656,7 +1754,16 @@ function renderStep2() {
     }
 
     renderAssistantForms(assistants);
+
+    const wantsReportSelect = document.getElementById('caregiverWantsReport');
+    const reportChannelWrap = document.getElementById('caregiverReportChannelWrap');
+    if (wantsReportSelect && reportChannelWrap) {
+        wantsReportSelect.addEventListener('change', () => {
+            reportChannelWrap.classList.toggle('d-none', wantsReportSelect.value !== 'true');
+        });
     }
+
+}
 
 function renderAssistantForms(list) {
     const container = document.getElementById('assistantForms');
@@ -2018,19 +2125,6 @@ function collectStep4Data() {
 function renderStep5() {
     const content = document.getElementById('wizardContent');
     if (!content) return;
-    const flags = therapyWizardState.flags || {};
-    const feedback = flags.caregiver_feedback || {};
-    const hasCaregiver =
-        therapyWizardState.general_anamnesis?.has_caregiver === true
-        || (therapyWizardState.therapy_assistants || []).length > 0;
-    const showCaregiverBlock = hasCaregiver;
-    const wantsReport = feedback.wants_monthly_report === true
-        || feedback.wants_monthly_report === 'true'
-        || feedback.wants_monthly_report === 'email'
-        || feedback.wants_monthly_report === 'whatsapp';
-    const reportChannel = feedback.wants_monthly_report === 'email' || feedback.wants_monthly_report === 'whatsapp'
-        ? feedback.wants_monthly_report
-        : (wantsReport ? 'email' : '');
     content.innerHTML = `
         <h5 class="mb-3">Sezione 5 – Note farmacista e follow-up</h5>
         <div class="row g-3">
@@ -2051,60 +2145,7 @@ function renderStep5() {
                 <textarea class="form-control" id="notesInitial" rows="3">${escapeHtml(therapyWizardState.notes_initial || '')}</textarea>
             </div>
         </div>
-        <div class="mt-4 ${showCaregiverBlock ? '' : 'd-none'}" id="caregiverBlock">
-            <h6 class="mb-2">Per il Caregiver</h6>
-            <div class="row g-3 mt-2">
-                <div class="col-md-6">
-                    <label class="form-label">È interessato a ricevere un REPORT mensile sullo stato di salute del suo familiare?</label>
-                    <select class="form-select" id="caregiverWantsReport">
-                        <option value="" ${feedback.wants_monthly_report === null || feedback.wants_monthly_report === undefined || feedback.wants_monthly_report === '' ? 'selected' : ''}>Non specificato</option>
-                        <option value="true" ${wantsReport ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${feedback.wants_monthly_report === 'none' || feedback.wants_monthly_report === false || feedback.wants_monthly_report === 'false' ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6 ${wantsReport ? '' : 'd-none'}" id="caregiverReportChannelWrap">
-                    <label class="form-label">Canale report</label>
-                    <select class="form-select" id="caregiverReportChannel">
-                        <option value="" ${!reportChannel ? 'selected' : ''}>Seleziona</option>
-                        <option value="email" ${reportChannel === 'email' ? 'selected' : ''}>Email</option>
-                        <option value="whatsapp" ${reportChannel === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">È favorevole ad autorizzare la farmacia a interagire con il medico curante del suo familiare?</label>
-                    <select class="form-select" id="caregiverAllowDoctor">
-                        <option value="" ${feedback.allow_doctor_interaction === null || feedback.allow_doctor_interaction === undefined ? 'selected' : ''}>Non specificato</option>
-                        <option value="true" ${feedback.allow_doctor_interaction === true ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${feedback.allow_doctor_interaction === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">È favorevole ad autorizzare questa farmacia al ritiro di ricette e referti presso lo studio medico del familiare?</label>
-                    <select class="form-select" id="caregiverAllowPickup">
-                        <option value="" ${feedback.allow_prescription_pickup === null || feedback.allow_prescription_pickup === undefined ? 'selected' : ''}>Non specificato</option>
-                        <option value="true" ${feedback.allow_prescription_pickup === true ? 'selected' : ''}>Sì</option>
-                        <option value="false" ${feedback.allow_prescription_pickup === false ? 'selected' : ''}>No</option>
-                    </select>
-                </div>
-            </div>
-            <div class="mt-3">
-                <label class="form-label">Note dal caregiver / informazioni aggiuntive</label>
-                <textarea class="form-control" id="caregiverNotes" rows="3">${escapeHtml(flags.caregiver_extra_notes || '')}</textarea>
-            </div>
-        </div>
     `;
-
-    const wantsReportSelect = document.getElementById('caregiverWantsReport');
-    const reportChannelWrap = document.getElementById('caregiverReportChannelWrap');
-    if (wantsReportSelect && reportChannelWrap) {
-        wantsReportSelect.addEventListener('change', () => {
-            reportChannelWrap.classList.toggle('d-none', wantsReportSelect.value !== 'true');
-        });
-    }
-
-    if (!showCaregiverBlock) {
-        clearCaregiverFlags(false);
-    }
 }
 
 function clearCaregiverFlags(updateState = false) {
@@ -2149,61 +2190,13 @@ function collectStep5Data() {
     if (notesInitialValue !== undefined) {
         therapyWizardState.notes_initial = notesInitialValue;
     }
-    const existingFlags = therapyWizardState.flags || {};
-    const existingFeedback = existingFlags.caregiver_feedback || {};
     const criticalIssuesValue = getValueIfExists('criticalIssues');
     const educationNotesValue = getValueIfExists('educationNotes');
-
-    const hasCaregiver =
-        therapyWizardState.general_anamnesis?.has_caregiver === true
-        || (therapyWizardState.therapy_assistants || []).length > 0;
-
-    let caregiverExtraNotes = existingFlags.caregiver_extra_notes ?? '';
-    let caregiverFeedback = { ...existingFeedback };
-
-    if (hasCaregiver) {
-        const wantsReportValue = getValueIfExists('caregiverWantsReport');
-        const reportChannelValue = getValueIfExists('caregiverReportChannel');
-        const wantsReport = wantsReportValue === 'true';
-        let wantsMonthlyReport = existingFeedback.wants_monthly_report || '';
-        if (wantsReportValue === 'false') {
-            wantsMonthlyReport = 'none';
-        } else if (wantsReport) {
-            wantsMonthlyReport = reportChannelValue || wantsMonthlyReport || 'email';
-        }
-
-        if (wantsReportValue !== undefined) {
-            caregiverFeedback = {
-                ...caregiverFeedback,
-                wants_monthly_report: wantsMonthlyReport
-            };
-        }
-
-        const allowDoctorValue = getValueIfExists('caregiverAllowDoctor');
-        const allowPickupValue = getValueIfExists('caregiverAllowPickup');
-        setIfDefined(caregiverFeedback, 'allow_doctor_interaction', toBoolIfDefined(allowDoctorValue));
-        setIfDefined(caregiverFeedback, 'allow_prescription_pickup', toBoolIfDefined(allowPickupValue));
-
-        const caregiverNotesValue = getValueIfExists('caregiverNotes');
-        if (caregiverNotesValue !== undefined) {
-            caregiverExtraNotes = caregiverNotesValue;
-        }
-    } else {
-        caregiverExtraNotes = '';
-        caregiverFeedback = {
-            ...caregiverFeedback,
-            wants_monthly_report: '',
-            allow_doctor_interaction: null,
-            allow_prescription_pickup: null
-        };
-    }
-
+    const existingFlags = therapyWizardState.flags || {};
     therapyWizardState.flags = {
         ...existingFlags,
         ...(criticalIssuesValue !== undefined ? { critical_issues: criticalIssuesValue } : {}),
-        ...(educationNotesValue !== undefined ? { education_notes: educationNotesValue } : {}),
-        caregiver_extra_notes: caregiverExtraNotes,
-        caregiver_feedback: caregiverFeedback
+        ...(educationNotesValue !== undefined ? { education_notes: educationNotesValue } : {})
     };
 }
 
@@ -2486,9 +2479,29 @@ function buildStepPayload(step) {
             };
         case 2:
             collectStep2Data();
-            return {
-                therapy_assistants: therapyWizardState.therapy_assistants
-            };
+            {
+                const hasCaregiver =
+                    therapyWizardState.general_anamnesis?.has_caregiver === true
+                    || (therapyWizardState.therapy_assistants || []).length > 0;
+                const existingFlags = therapyWizardState.flags || {};
+                const existingFeedback = existingFlags.caregiver_feedback || {};
+                const payload = {
+                    therapy_assistants: therapyWizardState.therapy_assistants
+                };
+                payload.flags = {
+                    ...existingFlags,
+                    caregiver_extra_notes: hasCaregiver ? (existingFlags.caregiver_extra_notes ?? '') : '',
+                    caregiver_feedback: hasCaregiver
+                        ? (existingFlags.caregiver_feedback || {})
+                        : {
+                            ...existingFeedback,
+                            wants_monthly_report: '',
+                            allow_doctor_interaction: null,
+                            allow_prescription_pickup: null
+                        }
+                };
+                return payload;
+            }
         case 3:
             collectStep3Data();
             return {

@@ -166,22 +166,24 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_followups` (
 
 
 -- ----------------------------------------------------------
--- jta_therapy_reminders (DB reale + PATCH: status include shown)
+-- jta_therapy_reminders (Agenda operativa interna)
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `jta_therapy_reminders` (
   `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
   `therapy_id` int UNSIGNED NOT NULL,
-  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `message` text COLLATE utf8mb4_unicode_ci NOT NULL,
-  `type` enum('one-shot','daily','weekly','monthly') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'one-shot',
-  `scheduled_at` datetime NOT NULL,
-  `channel` enum('email','sms','push') COLLATE utf8mb4_unicode_ci DEFAULT 'email',
-  `status` enum('scheduled','shown','sent','canceled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'scheduled',
+  `title` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `frequency` enum('one_shot','weekly','biweekly','monthly') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'one_shot',
+  `interval_value` int NOT NULL DEFAULT 1,
+  `weekday` tinyint DEFAULT NULL,
+  `first_due_at` datetime NOT NULL,
+  `next_due_at` datetime NOT NULL,
+  `status` enum('active','done','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_tr_therapy` (`therapy_id`),
-  KEY `idx_tr_schedule` (`scheduled_at`),
+  KEY `idx_tr_status_due` (`status`,`next_due_at`),
+  KEY `idx_tr_therapy_status` (`therapy_id`,`status`),
   CONSTRAINT `fk_tr_therapy`
     FOREIGN KEY (`therapy_id`) REFERENCES `jta_therapies` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -291,6 +293,3 @@ CREATE INDEX idx_tf_therapy_pharmacy_entry_check
 
 CREATE INDEX idx_tcq_therapy_pharmacy_active_sort
   ON jta_therapy_checklist_questions (therapy_id, pharmacy_id, is_active, sort_order);
-
-CREATE INDEX idx_tr_status_schedule
-  ON jta_therapy_reminders (status, scheduled_at);

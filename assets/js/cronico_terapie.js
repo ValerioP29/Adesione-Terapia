@@ -232,7 +232,22 @@ function renderPagination(items) {
 
 function attachReminderForm(therapySelect) {
     const form = document.getElementById('reminderForm');
+    const weekdayWrapper = document.getElementById('reminderWeekdayWrapper');
     if (!form) return;
+
+    const toggleWeekday = () => {
+        if (!weekdayWrapper) return;
+        const frequency = form.frequency?.value;
+        if (frequency === 'weekly') {
+            weekdayWrapper.classList.remove('d-none');
+        } else {
+            weekdayWrapper.classList.add('d-none');
+        }
+    };
+
+    form.frequency?.addEventListener('change', toggleWeekday);
+    toggleWeekday();
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const therapyId = therapySelect?.value;
@@ -243,10 +258,10 @@ function attachReminderForm(therapySelect) {
         const payload = {
             therapy_id: therapyId,
             title: form.title.value.trim(),
-            message: form.message.value.trim(),
-            type: form.type.value,
-            scheduled_at: form.scheduled_at.value,
-            channel: form.channel.value
+            description: form.description.value.trim(),
+            frequency: form.frequency.value,
+            first_due_at: form.first_due_at.value,
+            weekday: form.frequency.value === 'weekly' ? form.weekday.value : null
         };
 
         try {
@@ -262,6 +277,7 @@ function attachReminderForm(therapySelect) {
             }
             if (result?.success) {
                 form.reset();
+                toggleWeekday();
                 showReminderToast('Promemoria salvato correttamente', 'success');
                 loadReminders(therapyId);
             } else {
@@ -283,22 +299,50 @@ async function loadReminders(therapyId) {
     }
     list.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
     try {
-        const response = await fetch(`api/reminders.php?therapy_id=${therapyId}`);
+        const response = await fetch(`api/reminders.php?view=agenda&therapy_id=${therapyId}`);
         const result = await response.json();
         if (!result.success) {
             list.innerHTML = `<div class="text-danger">${sanitizeHtml(result.error || 'Errore nel caricamento')}</div>`;
             return;
         }
-        const items = result.data?.items || result.data || [];
-        if (!items.length) {
-            list.innerHTML = '<div class="text-muted">Nessun promemoria programmato</div>';
+        const overdue = result.data?.overdue || [];
+        const today = result.data?.today || [];
+        const upcoming = result.data?.upcoming || [];
+        if (!overdue.length && !today.length && !upcoming.length) {
+            list.innerHTML = '<div class="text-muted">Nessun promemoria in agenda</div>';
             return;
         }
-        const rows = items.map((r) => {
+        const sections = [
+            { key: 'Scaduti', items: overdue },
+            { key: 'Oggi', items: today },
+            { key: 'Prossimi', items: upcoming }
+        ];
+        list.innerHTML = sections.map((section) => renderAgendaSection(section.key, section.items, therapyId)).join('');
+    } catch (error) {
+        console.error(error);
+        list.innerHTML = '<div class="text-danger">Errore di rete</div>';
+    }
+}
+
+function renderReminderStatusBadge(status) {
+    const clsMap = {
+        active: 'bg-info text-dark',
+        done: 'bg-success',
+        cancelled: 'bg-secondary',
+        failed: 'bg-danger'
+    };
+    const label = status || '-';
+    const cls = clsMap[status] || 'bg-light text-dark';
+    return `<span class="badge ${cls}">${sanitizeHtml(label)}</span>`;
+}
+
+function renderAgendaSection(title, items, therapyId) {
+    const rows = items.length
+        ? items.map((r) => {
             const statusBadge = renderReminderStatusBadge(r.status);
-            const typeBadge = `<span class="badge bg-light text-dark">${sanitizeHtml(r.type || '')}</span>`;
-            const cancelButton = r.status === 'scheduled'
-                ? `<button class="btn btn-sm btn-outline-danger" onclick="cancelReminder(${r.id}, ${therapyId})">Cancella</button>`
+            const typeBadge = `<span class="badge bg-light text-dark">${sanitizeHtml(r.frequency || '')}</span>`;
+            const doneButton = r.status === 'active'
+                ? `<button class=\"btn btn-sm btn-outline-success\" onclick=\"markReminderDone(${r.id}, ${therapyId})\">Segna fatto</button>`
                 : '';
 
             return `
@@ -306,60 +350,49 @@ async function loadReminders(therapyId) {
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div>
                             <strong>${sanitizeHtml(r.title || '-')}</strong>
-                            <div class="small text-muted">${sanitizeHtml(r.channel || '')}</div>
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             ${typeBadge}
                             ${statusBadge}
                         </div>
                     </div>
-                    <div class="small text-muted">${sanitizeHtml(r.scheduled_at || '')}</div>
-                    <div>${sanitizeHtml(r.message || '')}</div>
-                    ${cancelButton ? `<div class="text-end mt-2">${cancelButton}</div>` : ''}
+                    <div class="small text-muted">${sanitizeHtml(r.next_due_at || '')}</div>
+                    <div>${sanitizeHtml(r.description || '')}</div>
+                    ${doneButton ? `<div class="text-end mt-2">${doneButton}</div>` : ''}
                 </div>
             `;
-        });
-        list.innerHTML = rows.join('');
-    } catch (error) {
-        console.error(error);
-        list.innerHTML = '<div class="text-danger">Errore di rete</div>';
-    }
+        }).join('')
+        : '<div class="text-muted">Nessun promemoria</div>';
+
+    return `
+        <div class="mb-3">
+            <h6 class="text-uppercase text-muted">${sanitizeHtml(title)}</h6>
+            ${rows}
+        </div>
+    `;
 }
 
-async function cancelReminder(reminderId, therapyId = null) {
+async function markReminderDone(reminderId, therapyId = null) {
     if (!reminderId) return;
     const targetTherapyId = therapyId || document.getElementById('reminderTherapySelect')?.value;
 
     try {
-        const response = await fetch(`api/reminders.php?action=cancel&id=${reminderId}`, { method: 'POST' });
+        const response = await fetch(`api/reminders.php?action=mark_done&id=${reminderId}`, { method: 'POST' });
         const result = await response.json().catch(() => null);
         if (!response.ok) {
-            showReminderToast(result?.message || result?.error || 'Errore nella cancellazione del promemoria', 'error');
+            showReminderToast(result?.message || result?.error || 'Errore nel completamento del promemoria', 'error');
             return;
         }
         if (result?.success) {
-            showReminderToast('Promemoria cancellato', 'success');
+            showReminderToast('Promemoria aggiornato', 'success');
             loadReminders(targetTherapyId);
         } else {
-            showReminderToast(result?.message || result?.error || 'Errore nella cancellazione del promemoria', 'error');
+            showReminderToast(result?.message || result?.error || 'Errore nel completamento del promemoria', 'error');
         }
     } catch (error) {
         console.error(error);
-        showReminderToast('Errore di rete nella cancellazione del promemoria', 'error');
+        showReminderToast('Errore di rete nel completamento del promemoria', 'error');
     }
-}
-
-function renderReminderStatusBadge(status) {
-    const clsMap = {
-        scheduled: 'bg-info text-dark',
-        shown: 'bg-success',
-        sent: 'bg-success',
-        canceled: 'bg-secondary',
-        failed: 'bg-danger'
-    };
-    const label = status || '-';
-    const cls = clsMap[status] || 'bg-light text-dark';
-    return `<span class="badge ${cls}">${sanitizeHtml(label)}</span>`;
 }
 
 function showReminderToast(message, type = 'success') {
@@ -1250,30 +1283,34 @@ async function openRemindersModal(therapyId = null) {
                                 <label class="form-label">Titolo</label>
                                 <input type="text" class="form-control" name="title" required>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Canale</label>
-                                <select class="form-select" name="channel" required>
-                                    <option value="email">Email</option>
-                                    <option value="sms">SMS</option>
-                                    <option value="whatsapp">Whatsapp</option>
-                                </select>
-                            </div>
                             <div class="col-12">
-                                <label class="form-label">Messaggio</label>
-                                <textarea class="form-control" name="message" rows="3" required></textarea>
+                                <label class="form-label">Descrizione</label>
+                                <textarea class="form-control" name="description" rows="3"></textarea>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Tipo</label>
-                                <select class="form-select" name="type" required>
-                                    <option value="one-shot">One-shot</option>
-                                    <option value="daily">Giornaliero</option>
+                                <select class="form-select" name="frequency" required>
+                                    <option value="one_shot">Una volta</option>
                                     <option value="weekly">Settimanale</option>
+                                    <option value="biweekly">Bisettimanale</option>
                                     <option value="monthly">Mensile</option>
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Data/Ora</label>
-                                <input type="datetime-local" class="form-control" name="scheduled_at" required>
+                                <label class="form-label">Data iniziale</label>
+                                <input type="datetime-local" class="form-control" name="first_due_at" required>
+                            </div>
+                            <div class="col-md-4 d-none" id="reminderWeekdayWrapper">
+                                <label class="form-label">Giorno settimana</label>
+                                <select class="form-select" name="weekday">
+                                    <option value="1">Lunedì</option>
+                                    <option value="2">Martedì</option>
+                                    <option value="3">Mercoledì</option>
+                                    <option value="4">Giovedì</option>
+                                    <option value="5">Venerdì</option>
+                                    <option value="6">Sabato</option>
+                                    <option value="7">Domenica</option>
+                                </select>
                             </div>
                             <div class="col-12 text-end">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>

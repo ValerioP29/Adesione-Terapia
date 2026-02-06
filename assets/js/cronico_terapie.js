@@ -69,6 +69,88 @@ function formatAnswerValue(value) {
     return value;
 }
 
+async function downloadPdfFile(url, fallbackFilename, errorMessage) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') || '';
+            let apiMessage = errorMessage;
+            try {
+                if (contentType.includes('application/json')) {
+                    const payload = await response.json();
+                    apiMessage = payload?.error || payload?.message || apiMessage;
+                } else {
+                    const text = await response.text();
+                    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+                    apiMessage = snippet ? `${apiMessage}: ${snippet}` : apiMessage;
+                }
+            } catch (e) {
+                // ignore parsing errors
+            }
+            throw new Error(apiMessage);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().includes('pdf')) {
+            const text = await response.text();
+            const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+            throw new Error(`Risposta non PDF${snippet ? `: ${snippet}` : ''}`);
+        }
+
+        const disposition = response.headers.get('content-disposition') || '';
+        const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|")?([^;"\n]+)"?/i);
+        let resolvedFilename = fallbackFilename;
+        if (filenameMatch && filenameMatch[1]) {
+            const raw = filenameMatch[1]
+                .trim()
+                .replace(/^"|"$/g, '');
+            try {
+                resolvedFilename = decodeURIComponent(raw);
+            } catch (e) {
+                // header malformato: meglio scaricare comunque
+                resolvedFilename = raw || fallbackFilename;
+            }
+        }
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = resolvedFilename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+        console.error(error);
+        alert(error.message || errorMessage);
+    }
+}
+
+function downloadTherapyPdf(therapyId) {
+    if (!therapyId) {
+        alert('Seleziona una terapia.');
+        return;
+    }
+    const query = new URLSearchParams({
+        action: 'therapy_pdf',
+        therapy_id: therapyId
+    });
+    downloadPdfFile(`api/reports.php?${query.toString()}`, `riepilogo_terapia_${therapyId}.pdf`, 'Impossibile generare PDF');
+}
+
+function downloadFollowupPdf(followupId) {
+    if (!followupId) {
+        alert('Seleziona un follow-up.');
+        return;
+    }
+    const query = new URLSearchParams({
+        action: 'followup_pdf',
+        followup_id: followupId
+    });
+    downloadPdfFile(`api/reports.php?${query.toString()}`, `followup_${followupId}.pdf`, 'Impossibile generare PDF');
+}
+
 async function initCronicoTerapiePage() {
     await ensureSurveyTemplatesLoaded();
     attachToolbarActions();
@@ -183,6 +265,9 @@ function renderTherapyRows(items) {
                     </button>
                     <button class="btn btn-sm btn-outline-secondary" data-therapy-id="${item.id}" title="Check periodico" onclick="openFollowupModal(${item.id})">
                         <i class="fas fa-stethoscope"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" data-therapy-id="${item.id}" title="Scarica PDF terapia" onclick="downloadTherapyPdf(${item.id})">
+                        <i class="fas fa-file-pdf"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-danger" data-therapy-id="${item.id}" title="Sospendi" onclick="suspendTherapy(${item.id})">
                         <i class="fas fa-ban"></i>
@@ -597,6 +682,7 @@ async function loadFollowups(therapyId) {
             const cancelButton = r.status === 'scheduled'
                 ? `<button class="btn btn-sm btn-outline-danger" onclick="cancelFollowup(${r.id}, ${therapyId})">Cancella</button>`
                 : '';
+            const pdfButton = `<button class="btn btn-sm btn-outline-primary" onclick="downloadFollowupPdf(${r.id})">Scarica PDF</button>`;
             return `
                 <div class="border rounded p-2 mb-2">
                     <div class="d-flex justify-content-between align-items-center">
@@ -606,6 +692,7 @@ async function loadFollowups(therapyId) {
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             ${statusBadge}
+                            ${pdfButton}
                             ${cancelButton ? cancelButton : ''}
                         </div>
                     </div>
@@ -708,6 +795,7 @@ async function openCheckPeriodicoModal(therapyId = null) {
                                             <th>Rischio</th>
                                             <th>Stato</th>
                                             <th>Risposte</th>
+                                            <th>PDF</th>
                                         </tr>
                                     </thead>
                                     <tbody id="checkHistoryBody"></tbody>
@@ -752,19 +840,19 @@ async function loadCheckFollowups(therapyId) {
     renderCheckMetaForm(null);
 
     if (!therapyId) {
-        historyBody.innerHTML = '<tr><td colspan="5" class="text-muted">Seleziona una terapia per proseguire</td></tr>';
+        historyBody.innerHTML = '<tr><td colspan="6" class="text-muted">Seleziona una terapia per proseguire</td></tr>';
         questionList.innerHTML = '<div class="text-muted">Nessun check disponibile</div>';
         return;
     }
 
-    historyBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Caricamento...</td></tr>';
+    historyBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Caricamento...</td></tr>';
     questionList.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
 
     try {
         const response = await fetch(`api/followups.php?therapy_id=${therapyId}&entry_type=check`);
         const result = await response.json();
         if (!result.success) {
-            historyBody.innerHTML = `<tr><td colspan="5" class="text-danger">${sanitizeHtml(result.error || 'Errore nel caricamento')}</td></tr>`;
+            historyBody.innerHTML = `<tr><td colspan="6" class="text-danger">${sanitizeHtml(result.error || 'Errore nel caricamento')}</td></tr>`;
             questionList.innerHTML = '<div class="text-danger">Errore nel caricamento</div>';
             return;
         }
@@ -781,7 +869,7 @@ async function loadCheckFollowups(therapyId) {
         }
     } catch (error) {
         console.error(error);
-        historyBody.innerHTML = '<tr><td colspan="5" class="text-danger">Errore di rete</td></tr>';
+        historyBody.innerHTML = '<tr><td colspan="6" class="text-danger">Errore di rete</td></tr>';
         questionList.innerHTML = '<div class="text-danger">Errore di rete</div>';
     }
 }
@@ -917,7 +1005,7 @@ function renderCheckHistory(items) {
     const historyBody = document.getElementById('checkHistoryBody');
     if (!historyBody) return;
     if (!items.length) {
-        historyBody.innerHTML = '<tr><td colspan="5" class="text-muted">Nessun check registrato</td></tr>';
+        historyBody.innerHTML = '<tr><td colspan="6" class="text-muted">Nessun check registrato</td></tr>';
         return;
     }
 
@@ -934,6 +1022,11 @@ function renderCheckHistory(items) {
                 <td>${sanitizeHtml(item.risk_score ?? '-')}</td>
                 <td>${statusBadge}</td>
                 <td>${sanitizeHtml(checkTypeLabel)} · ${answersCount}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" type="button" onclick="downloadFollowupPdf(${item.id})">
+                        Scarica PDF
+                    </button>
+                </td>
             </tr>
         `;
     }).join('');

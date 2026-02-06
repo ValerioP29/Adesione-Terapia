@@ -216,6 +216,7 @@ switch ($method) {
                 [$therapy_id]
             );
             $nextSort = (int)($maxRow['max_sort'] ?? 0) + 1;
+            $questionKey = 'custom_' . bin2hex(random_bytes(16));
             try {
                 db_query(
                     "INSERT INTO jta_therapy_checklist_questions (therapy_id, pharmacy_id, condition_key, question_key, question_text, input_type, options_json, sort_order, is_active)
@@ -224,7 +225,7 @@ switch ($method) {
                         $therapy_id,
                         $pharmacy_id,
                         $conditionRow['primary_condition'] ?? null,
-                        null,
+                        $questionKey,
                         $text,
                         $type,
                         is_array($options) ? json_encode($options) : null,
@@ -312,6 +313,30 @@ switch ($method) {
                 return (int)$row['id'];
             }, $validRows);
             $validIdSet = array_flip($validIds);
+            $answerQuestionIds = [];
+            foreach ($answers as $answer) {
+                if (isset($answer['question_id'])) {
+                    $answerQuestionIds[] = (int)$answer['question_id'];
+                }
+            }
+            $answerQuestionIds = array_values(array_unique(array_filter($answerQuestionIds)));
+            if ($answerQuestionIds) {
+                $placeholders = implode(',', array_fill(0, count($answerQuestionIds), '?'));
+                try {
+                    $questionRows = db_fetch_all(
+                        "SELECT id, therapy_id FROM jta_therapy_checklist_questions WHERE id IN ($placeholders)",
+                        $answerQuestionIds
+                    );
+                } catch (Exception $e) {
+                    respondFollowups(false, null, 'Errore verifica domande checklist', 500);
+                }
+                $questionTherapyMap = [];
+                foreach ($questionRows as $row) {
+                    $questionTherapyMap[(int)$row['id']] = (int)$row['therapy_id'];
+                }
+            } else {
+                $questionTherapyMap = [];
+            }
 
             try {
                 foreach ($answers as $answer) {
@@ -320,6 +345,9 @@ switch ($method) {
                         continue;
                     }
                     $question_id = (int)$question_id;
+                    if (isset($questionTherapyMap[$question_id]) && (int)$questionTherapyMap[$question_id] !== (int)$therapyId) {
+                        respondFollowups(false, null, 'Domanda non appartiene alla terapia del follow-up', 400);
+                    }
                     if (!isset($validIdSet[$question_id])) {
                         respondFollowups(false, null, 'Domanda non valida per la terapia', 422);
                     }

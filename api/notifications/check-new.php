@@ -8,6 +8,8 @@ require_once '../../config/database.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/auth_middleware.php';
 
+date_default_timezone_set('Europe/Rome');
+
 // Verifica autenticazione
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
@@ -65,16 +67,18 @@ try {
     }
 
     // Recupera promemoria in scadenza per la farmacia
+    $timezone = new DateTimeZone('Europe/Rome');
+    $now = new DateTime('now', $timezone);
     $due_reminders = $db->fetchAll("
         SELECT r.id, r.title, r.message, r.type, r.channel, r.scheduled_at, r.therapy_id, t.therapy_title,
                p.first_name, p.last_name
         FROM jta_therapy_reminders r
         JOIN jta_therapies t ON r.therapy_id = t.id
         LEFT JOIN jta_patients p ON t.patient_id = p.id
-        WHERE r.status = 'scheduled' AND r.scheduled_at <= NOW() AND t.pharmacy_id = ?
+        WHERE r.status = 'scheduled' AND r.scheduled_at <= ? AND t.pharmacy_id = ?
         ORDER BY r.scheduled_at ASC
         LIMIT 20
-    ", [$pharmacy_id]);
+    ", [$now->format('Y-m-d H:i:s'), $pharmacy_id]);
 
     $reminders = [];
     $recurringTypes = ['daily', 'weekly', 'monthly'];
@@ -104,7 +108,7 @@ try {
                 if ($scheduledAt) {
                     $nextScheduledAt = null;
                     try {
-                        $dt = new DateTime($scheduledAt);
+                        $dt = new DateTime($scheduledAt, $timezone);
                         switch ($reminder['type']) {
                             case 'daily':
                                 $dt->modify('+1 day');

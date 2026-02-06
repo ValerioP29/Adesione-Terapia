@@ -242,7 +242,7 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_checklist_questions` (
   `therapy_id` INT UNSIGNED NOT NULL,
   `pharmacy_id` INT UNSIGNED NOT NULL,
   `condition_key` VARCHAR(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `question_key` VARCHAR(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `question_key` VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `question_text` TEXT COLLATE utf8mb4_unicode_ci NOT NULL,
   `input_type` VARCHAR(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'text',
   `options_json` JSON DEFAULT NULL,
@@ -275,3 +275,22 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_checklist_answers` (
   CONSTRAINT `fk_tca_followup` FOREIGN KEY (`followup_id`) REFERENCES `jta_therapy_followups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tca_question` FOREIGN KEY (`question_id`) REFERENCES `jta_therapy_checklist_questions` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------------------------------------
+-- PATCH P0: stabilità question_key + performance indices
+-- ----------------------------------------------------------
+UPDATE jta_therapy_checklist_questions
+SET question_key = CONCAT('custom_', UUID())
+WHERE question_key IS NULL;
+
+ALTER TABLE jta_therapy_checklist_questions
+  MODIFY COLUMN question_key VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL;
+
+CREATE INDEX idx_tf_therapy_pharmacy_entry_check
+  ON jta_therapy_followups (therapy_id, pharmacy_id, entry_type, check_type);
+
+CREATE INDEX idx_tcq_therapy_pharmacy_active_sort
+  ON jta_therapy_checklist_questions (therapy_id, pharmacy_id, is_active, sort_order);
+
+CREATE INDEX idx_tr_status_schedule
+  ON jta_therapy_reminders (status, scheduled_at);

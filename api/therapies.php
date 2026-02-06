@@ -40,6 +40,21 @@ function normalizeDateFields($data) {
     return $data;
 }
 
+function normalizeTherapyTitle($value, $fallback = null, $maxLength = 150) {
+    $raw = is_string($value) ? trim($value) : '';
+    $raw = strip_tags($raw);
+    if ($raw === '') {
+        $raw = is_string($fallback) ? trim(strip_tags($fallback)) : '';
+    }
+    if ($raw === '') {
+        return null;
+    }
+    if (mb_strlen($raw) > $maxLength) {
+        $raw = mb_substr($raw, 0, $maxLength);
+    }
+    return sanitize($raw);
+}
+
 function executeQueryWithTypes(PDO $pdo, string $sql, array $params = []) {
     $stmt = $pdo->prepare($sql);
     $index = 1;
@@ -414,7 +429,7 @@ switch ($method) {
                 );
             }
 
-            $therapy_title = $input['therapy_title'] ?? ('– ' . $primary_condition);
+            $therapy_title = normalizeTherapyTitle($input['therapy_title'] ?? null, $primary_condition);
             $therapy_description = $input['therapy_description'] ?? $initial_notes;
             $status = $input['status'] ?? 'active';
             $start_date = $input['start_date'] ?? date('Y-m-d');
@@ -635,10 +650,8 @@ switch ($method) {
                 : ($careRow['primary_condition'] ?? null);
 
             $therapyTitlePayload = array_key_exists('therapy_title', $input)
-                ? $input['therapy_title']
-                : ($hasPrimaryCondition
-                    ? ('– ' . $primary_condition)
-                    : ($therapy['therapy_title'] ?? null));
+                ? normalizeTherapyTitle($input['therapy_title'], $primary_condition)
+                : ($therapy['therapy_title'] ?? null);
             $therapyDescriptionPayload = array_key_exists('therapy_description', $input)
                 ? $input['therapy_description']
                 : (array_key_exists('initial_notes', $input)

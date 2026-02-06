@@ -147,7 +147,7 @@ const wizardStepConfig = [
         render: renderStep1,
         collect: collectStep1Data,
         validate: validateStep,
-        payloadKeys: ['patient', 'primary_condition', 'initial_notes']
+        payloadKeys: ['patient', 'primary_condition', 'therapy_title', 'initial_notes']
     },
     {
         id: 2,
@@ -594,6 +594,7 @@ function getDefaultWizardState() {
     return {
         patient: {},
         primary_condition: null,
+        therapy_title: null,
         initial_notes: null,
         general_anamnesis: {},
         detailed_intake: {},
@@ -788,6 +789,9 @@ async function loadTherapyForEdit(therapyId) {
             if (t.primary_condition) {
                 mappedState.primary_condition = t.primary_condition;
             }
+            if (t.therapy_title !== undefined && t.therapy_title !== null) {
+                mappedState.therapy_title = t.therapy_title;
+            }
             mappedState.initial_notes = t.therapy_description || null;
             mappedState.notes_initial = t.notes_initial ?? null;
             mappedState.follow_up_date = t.follow_up_date || null;
@@ -950,6 +954,7 @@ function renderStep1() {
 
     const patient = therapyWizardState.patient || {};
     const primary_condition = therapyWizardState.primary_condition || '';
+    const therapyTitle = ((therapyWizardState.therapy_title || '').trim()) || primary_condition || '';
 
     content.innerHTML = `
         <div class="mb-4">
@@ -1000,9 +1005,9 @@ function renderStep1() {
                     <label class="form-label">Note paziente</label>
                     <textarea class="form-control" id="patientNotes" rows="2">${escapeHtml(patient.notes || '')}</textarea>
                 </div>
-                <div class="col-12">
-                    <label class="form-label">Note terapia (contesto/obiettivi)</label>
-                    <textarea class="form-control" id="therapyNotes" rows="2">${escapeHtml(therapyWizardState.initial_notes || '')}</textarea>
+                <div class="col-md-6">
+                    <label class="form-label">Titolo terapia</label>
+                    <input type="text" class="form-control" id="therapyTitle" maxlength="150" value="${escapeHtml(therapyTitle)}">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Patologia seguita *</label>
@@ -1015,6 +1020,10 @@ function renderStep1() {
                         <option value="Altro" ${primary_condition === 'Altro' ? 'selected' : ''}>Altro</option>
                     </select>
                     <input type="text" class="form-control mt-2" id="primaryConditionOther" placeholder="Specificare se Altro" value="${primary_condition && !['Diabete','BPCO','Ipertensione','Dislipidemia','Altro'].includes(primary_condition) ? escapeHtml(primary_condition) : ''}">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Note terapia (contesto/obiettivi)</label>
+                    <textarea class="form-control" id="therapyNotes" rows="2">${escapeHtml(therapyWizardState.initial_notes || '')}</textarea>
                 </div>
             </div>
         </div>
@@ -1077,13 +1086,28 @@ function applyPrimaryConditionToInputs(value) {
 function handlePrimaryConditionChange() {
     const previous = therapyWizardState.primary_condition || '';
     const nextValue = getPrimaryConditionFromInputs();
-    if (!previous || previous === nextValue) {
+    if (previous === nextValue) {
+        return;
+    }
+    const updatePrimaryCondition = () => {
+        therapyWizardState.primary_condition = nextValue || null;
+        const currentTitle = (therapyWizardState.therapy_title || '').trim();
+        if (!currentTitle || currentTitle === previous) {
+            therapyWizardState.therapy_title = nextValue || null;
+            const titleInput = getEl('therapyTitle');
+            if (titleInput) {
+                titleInput.value = nextValue || '';
+            }
+        }
+    };
+    if (!previous) {
+        updatePrimaryCondition();
         return;
     }
     const existingAnswers = therapyWizardState.condition_survey?.answers || {};
     const hasSurveyAnswers = Object.values(existingAnswers).some((val) => val !== '' && val !== null && val !== undefined);
     if (!hasSurveyAnswers) {
-        therapyWizardState.primary_condition = nextValue || null;
+        updatePrimaryCondition();
         return;
     }
     const confirmed = confirm('Hai modificato la patologia: vuoi resettare le risposte del questionario specifico?');
@@ -1094,7 +1118,7 @@ function handlePrimaryConditionChange() {
             answers: {},
             compiled_at: null
         };
-        therapyWizardState.primary_condition = nextValue || null;
+        updatePrimaryCondition();
     } else {
         applyPrimaryConditionToInputs(previous);
     }
@@ -1157,6 +1181,11 @@ function collectStep1Data() {
     const therapyNotes = getValueIfExists('therapyNotes');
     if (therapyNotes !== undefined) {
         therapyWizardState.initial_notes = therapyNotes;
+    }
+    const therapyTitleValue = getValueIfExists('therapyTitle');
+    if (therapyTitleValue !== undefined) {
+        const trimmedTitle = therapyTitleValue.trim();
+        therapyWizardState.therapy_title = trimmedTitle ? trimmedTitle : null;
     }
     const primaryValue = getValueIfExists('primaryCondition');
     const otherValue = getValueIfExists('primaryConditionOther');
@@ -2415,6 +2444,7 @@ function assemblePayload() {
     return {
         patient: therapyWizardState.patient,
         primary_condition: therapyWizardState.primary_condition,
+        therapy_title: therapyWizardState.therapy_title,
         initial_notes: therapyWizardState.initial_notes,
         general_anamnesis: therapyWizardState.general_anamnesis,
         detailed_intake: therapyWizardState.detailed_intake,

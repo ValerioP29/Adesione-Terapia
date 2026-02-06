@@ -165,8 +165,8 @@ function renderTherapyRows(items) {
         return `<tr>
             <td>${sanitizeHtml(patientName)}</td>
             <td>${sanitizeHtml(item.codice_fiscale || '-')}</td>
-            <td>${sanitizeHtml(item.primary_condition || item.therapy_title || '-')}</td>
-            <td>${sanitizeHtml(item.therapy_title || '-')}</td>
+            <td>${sanitizeHtml(item.primary_condition || '-')}</td>
+            <td>${sanitizeHtml(item.therapy_title || item.primary_condition || '-')}</td>
             <td>${statusBadge}</td>
             <td>${sanitizeHtml(item.start_date || '-')}</td>
             <td>${sanitizeHtml(item.end_date || '-')}</td>
@@ -1214,8 +1214,8 @@ async function populateTherapySelect(selectEl, selectedId = null, placeholder = 
 
 function formatTherapyOption(therapy) {
     const patientName = `${therapy.first_name || ''} ${therapy.last_name || ''}`.trim() || 'Paziente';
-    const condition = therapy.primary_condition || therapy.condition || therapy.therapy_title || '-';
-    const title = therapy.therapy_title || '-';
+    const condition = therapy.primary_condition || therapy.condition || '-';
+    const title = therapy.therapy_title || therapy.primary_condition || therapy.condition || '-';
     return `${patientName} – ${condition} – ${title}`;
 }
 

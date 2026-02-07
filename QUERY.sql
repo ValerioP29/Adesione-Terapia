@@ -166,27 +166,42 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_followups` (
 
 
 -- ----------------------------------------------------------
--- jta_therapy_reminders (Agenda operativa interna)
+-- jta_therapy_reminders 
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `jta_therapy_reminders` (
-  `id` int UNSIGNED NOT NULL AUTO_INCREMENT,
-  `therapy_id` int UNSIGNED NOT NULL,
-  `title` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `description` text COLLATE utf8mb4_unicode_ci,
-  `frequency` enum('one_shot','weekly','biweekly','monthly') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'one_shot',
-  `interval_value` int NOT NULL DEFAULT 1,
-  `weekday` tinyint DEFAULT NULL,
-  `first_due_at` datetime NOT NULL,
-  `next_due_at` datetime NOT NULL,
-  `status` enum('active','done','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `therapy_id` INT UNSIGNED NOT NULL,
+
+  `title` VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` TEXT COLLATE utf8mb4_unicode_ci NULL,
+
+
+  -- recurring rules
+  `frequency` ENUM('once','daily','weekly','monthly') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'once',
+  `interval_value` INT UNSIGNED NOT NULL DEFAULT 1,
+  `weekday` TINYINT UNSIGNED DEFAULT NULL, -- 1=Mon ... 7=Sun (solo per weekly)
+
+  -- scheduling
+  `first_due_at` DATETIME NOT NULL,
+  `next_due_at` DATETIME NOT NULL,
+
+  -- state
+  `status` ENUM('active','done','canceled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
   PRIMARY KEY (`id`),
-  KEY `idx_tr_status_due` (`status`,`next_due_at`),
-  KEY `idx_tr_therapy_status` (`therapy_id`,`status`),
+
+  KEY `idx_tr_therapy` (`therapy_id`),
+  KEY `idx_tr_status_due` (`status`, `next_due_at`),
+  KEY `idx_tr_therapy_status` (`therapy_id`, `status`),
+
   CONSTRAINT `fk_tr_therapy`
-    FOREIGN KEY (`therapy_id`) REFERENCES `jta_therapies` (`id`) ON DELETE CASCADE
+    FOREIGN KEY (`therapy_id`) REFERENCES `jta_therapies` (`id`)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 
 -- ----------------------------------------------------------
 -- jta_therapy_reports (DB reale)
@@ -244,7 +259,7 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_checklist_questions` (
   `therapy_id` INT UNSIGNED NOT NULL,
   `pharmacy_id` INT UNSIGNED NOT NULL,
   `condition_key` VARCHAR(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `question_key` VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `question_key` VARCHAR(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `question_text` TEXT COLLATE utf8mb4_unicode_ci NOT NULL,
   `input_type` VARCHAR(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'text',
   `options_json` JSON DEFAULT NULL,
@@ -277,19 +292,3 @@ CREATE TABLE IF NOT EXISTS `jta_therapy_checklist_answers` (
   CONSTRAINT `fk_tca_followup` FOREIGN KEY (`followup_id`) REFERENCES `jta_therapy_followups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_tca_question` FOREIGN KEY (`question_id`) REFERENCES `jta_therapy_checklist_questions` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ----------------------------------------------------------
--- PATCH P0: stabilità question_key + performance indices
--- ----------------------------------------------------------
-UPDATE jta_therapy_checklist_questions
-SET question_key = CONCAT('custom_', UUID())
-WHERE question_key IS NULL;
-
-ALTER TABLE jta_therapy_checklist_questions
-  MODIFY COLUMN question_key VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL;
-
-CREATE INDEX idx_tf_therapy_pharmacy_entry_check
-  ON jta_therapy_followups (therapy_id, pharmacy_id, entry_type, check_type);
-
-CREATE INDEX idx_tcq_therapy_pharmacy_active_sort
-  ON jta_therapy_checklist_questions (therapy_id, pharmacy_id, is_active, sort_order);

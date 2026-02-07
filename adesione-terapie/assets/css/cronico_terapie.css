@@ -1,0 +1,159 @@
+.jt-adesione-terapie {
+    --jt-spacing-xs: 0.25rem;
+    --jt-spacing-sm: 0.5rem;
+    --jt-spacing-md: 1rem;
+    --jt-spacing-lg: 1.5rem;
+    --jt-radius-md: 0.5rem;
+    --jt-radius-lg: 0.75rem;
+    --jt-text-muted: #6c757d;
+    color: #212529;
+    max-width: 100%;
+}
+
+.jt-adesione-terapie .container-fluid {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+}
+
+.jt-adesione-terapie .border-bottom {
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.jt-adesione-terapie .card {
+    border-radius: var(--jt-radius-lg);
+}
+
+.jt-adesione-terapie .card + .card {
+    margin-top: var(--jt-spacing-lg);
+}
+
+.jt-adesione-terapie .form-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: var(--jt-spacing-xs);
+}
+
+.jt-adesione-terapie .form-control,
+.jt-adesione-terapie .form-select {
+    min-height: 2.5rem;
+    border-radius: var(--jt-radius-md);
+}
+
+.jt-adesione-terapie .form-text,
+.jt-adesione-terapie .text-muted {
+    font-size: 0.85rem;
+    color: var(--jt-text-muted);
+}
+
+.jt-adesione-terapie .row.g-3 {
+    --bs-gutter-y: 1rem;
+}
+
+.jt-adesione-terapie textarea.form-control {
+    min-height: 5rem;
+}
+
+.jt-adesione-terapie .btn {
+    padding: 0.5rem 1rem;
+    border-radius: var(--jt-radius-md);
+    min-height: 2.5rem;
+    font-weight: 600;
+}
+
+.jt-adesione-terapie .btn:disabled,
+.jt-adesione-terapie .btn.disabled {
+    opacity: 0.65;
+}
+
+.jt-adesione-terapie .btn-group,
+.jt-adesione-terapie .d-flex.gap-2 {
+    gap: 0.75rem;
+}
+
+.jt-adesione-terapie .table-responsive {
+    border-radius: var(--jt-radius-md);
+}
+
+.jt-adesione-terapie .table thead th {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.jt-adesione-terapie .pagination {
+    margin-top: var(--jt-spacing-lg);
+}
+
+.jt-adesione-terapie #wizardStepIndicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem;
+    background: #f5f7fa;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.jt-adesione-terapie #wizardContent > .mb-4,
+.jt-adesione-terapie #wizardContent > .mb-3 {
+    margin-bottom: var(--jt-spacing-lg);
+}
+
+.jt-adesione-terapie #wizardContent h5 {
+    font-size: 1.1rem;
+    margin-bottom: var(--jt-spacing-md);
+}
+
+.jt-adesione-terapie .modal-content {
+    border-radius: var(--jt-radius-lg);
+}
+
+.jt-adesione-terapie .modal-header,
+.jt-adesione-terapie .modal-footer {
+    padding: 1rem 1.5rem;
+}
+
+.jt-adesione-terapie .modal-body {
+    padding: 1.5rem;
+}
+
+.jt-adesione-terapie .modal-footer {
+    gap: 0.75rem;
+}
+
+.jt-adesione-terapie #wizardContent .input-group > .btn {
+    min-height: 2.5rem;
+}
+
+.jt-adesione-terapie .table-responsive,
+.jt-adesione-terapie .modal-dialog {
+    max-width: 100%;
+}
+
+.jt-adesione-terapie .signature-canvas {
+    border-radius: var(--jt-radius-md);
+}
+
+@media (max-width: 768px) {
+    .jt-adesione-terapie .container-fluid {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .jt-adesione-terapie .modal-dialog {
+        margin: 0.5rem;
+    }
+
+    .jt-adesione-terapie .modal-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .jt-adesione-terapie .modal-footer > div {
+        width: 100%;
+    }
+
+    .jt-adesione-terapie .modal-footer .btn {
+        width: 100%;
+    }
+}

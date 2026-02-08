@@ -1,0 +1,92 @@
+/* Fix layout bottoni header cronico_terapie */
+.jt-adesione-terapie .jt-actions {
+  align-items: stretch;
+}
+
+.jt-adesione-terapie .jt-actions > .btn {
+  min-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Tablet: 2 bottoni per riga */
+@media (max-width: 768px) {
+  .jt-adesione-terapie .jt-actions > .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: unset;
+  }
+}
+
+/* Telefono: 1 bottone per riga */
+@media (max-width: 420px) {
+  .jt-adesione-terapie .jt-actions > .btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+
+/* Reminder list item layout */
+.jt-adesione-terapie .jt-reminder-head {
+  flex-wrap: wrap;
+}
+
+.jt-adesione-terapie .jt-reminder-head > .jt-reminder-main {
+    min-width: 0;          
+}
+
+.jt-adesione-terapie .jt-reminder-date {
+    white-space: nowrap;   /* evita spezzatura tipo 2026- 12- 07 */
+}
+
+
+.jt-adesione-terapie .jt-reminder-main {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.jt-adesione-terapie .jt-reminder-badges {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.jt-adesione-terapie .jt-caregiver-row {
+  gap: 0.75rem;
+}
+
+.jt-adesione-terapie .jt-caregiver-left,
+.jt-adesione-terapie .jt-caregiver-right {
+  min-width: 0; /* flex fix: allow shrinking properly */
+}
+
+.jt-adesione-terapie .jt-caregiver-left {
+  flex: 1 1 60%;
+}
+
+.jt-adesione-terapie .jt-caregiver-right {
+  flex: 0 1 40%;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+@media (max-width: 576px) {
+  .jt-adesione-terapie .jt-caregiver-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .jt-adesione-terapie .jt-caregiver-right {
+    text-align: left;
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .jt-adesione-terapie .jt-reminder-actions .btn {
+    width: 100%;
+  }
+}

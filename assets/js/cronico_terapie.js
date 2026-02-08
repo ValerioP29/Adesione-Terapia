@@ -431,21 +431,25 @@ function renderAgendaSection(title, items, therapyId) {
                 : '';
 
             return `
-                <div class="border rounded p-2 mb-2">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
-                        <div>
-                            <strong>${sanitizeHtml(r.title || '-')}</strong>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            ${typeBadge}
-                            ${statusBadge}
-                        </div>
-                    </div>
-                    <div class="small text-muted">${sanitizeHtml(r.next_due_at || '')}</div>
-                    <div>${sanitizeHtml(r.description || '')}</div>
-                    ${doneButton ? `<div class="text-end mt-2">${doneButton}</div>` : ''}
+            <div class="border rounded p-2 mb-2 jt-reminder-item">
+                <div class="d-flex justify-content-between align-items-start gap-2 jt-reminder-head">
+                <div class="jt-reminder-main">
+                    <strong>${sanitizeHtml(r.title || '-')}</strong>
+                    ${r.next_due_at ? `<div class="small text-muted jt-reminder-date">${sanitizeHtml(r.next_due_at)}</div>` : ''}
                 </div>
+
+                <div class="d-flex align-items-center gap-2 jt-reminder-badges">
+                    ${typeBadge}
+                    ${statusBadge}
+                </div>
+                </div>
+
+                ${r.description ? `<div class="jt-reminder-desc mt-1">${sanitizeHtml(r.description)}</div>` : ''}
+
+                ${doneButton ? `<div class="text-end mt-2 jt-reminder-actions">${doneButton}</div>` : ''}
+            </div>
             `;
+
         }).join('')
         : '<div class="text-muted">Nessun promemoria</div>';
 
@@ -579,10 +583,7 @@ async function loadReports(therapyId) {
             return;
         }
         const items = result.data?.items || [];
-        if (!items.length) {
-            list.innerHTML = '<div class="text-muted">Nessun report</div>';
-            return;
-        }
+      
         const rows = items.map((r) => {
             const previewHtml = buildReportPreviewHtml(r.content);
             return `
@@ -1641,12 +1642,12 @@ function buildReportPreviewHtml(content) {
                   const name = clean(`${cleanRaw(c.first_name)} ${cleanRaw(c.last_name)}`.trim(), '-');
                   const relation = clean(c.relation_to_patient || c.type || '-');
                   const contact = clean(`${cleanRaw(c.email || '-')}`) + ' | ' + clean(`${cleanRaw(c.phone || '-')}`);
-                  return `<li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="me-3" style="min-width:0;">
+                  return `<li class="list-group-item d-flex justify-content-between align-items-start jt-caregiver-row">
+                        <div class="me-3 jt-caregiver-left" style="min-width:0;">
                             <div class="fw-semibold">${name}</div>
                             <div class="small text-muted">${relation}</div>
                         </div>
-                        <div class="small text-end" style="max-width:45%; min-width:0; overflow-wrap:anywhere; word-break:break-word; white-space:normal;">
+                        <div class="small text-end jt-caregiver-right" style="max-width:45%; min-width:0; overflow-wrap:anywhere; word-break:break-word; white-space:normal;">
                             ${contact}
                         </div>
                     </li>`;
@@ -1655,7 +1656,6 @@ function buildReportPreviewHtml(content) {
         : '<div class="text-muted small">Nessun caregiver registrato</div>';
 
     return `
-        <div class="border rounded p-3">
 
             <!-- FARMACIA / FARMACISTA -->
             <div class="row g-3 report-section">

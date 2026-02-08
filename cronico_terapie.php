@@ -8,31 +8,34 @@ requirePharmacistOrAdmin();
 
 $current_page = 'cronico_terapie';
 $page_title = 'Gestione Terapie Paziente Cronico';
+
 $additional_css = [
-    'adesione-terapie/assets/css/cronico_terapie.css'
+    'assets/css/cronico_terapie_tweaks.css',
 ];
+
 $additional_js = [
     'assets/js/cronico_terapie.js',
     'adesione-terapie/assets/js/signature_pad.js',
     'adesione-terapie/assets/js/cronico_wizard.js'
 ];
 
+
 include 'includes/header.php';
 ?>
 
-<div class="jt-adesione-terapie">
-    <div class="container-fluid">
-        <div class="row">
-            <?php include 'includes/sidebar.php'; ?>
+<div class="container-fluid">
+    <div class="row">
+        <?php include 'includes/sidebar.php'; ?>
 
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="pt-3 pb-2 mb-3 border-bottom">
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+            <div class="jt-adesione-terapie">
+                <div class="jt-adesione-terapie__header pt-3 pb-2 mb-3 border-bottom">
                     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
                         <div>
                             <h1 class="h2 mb-0">Gestione Terapie</h1>
                             <p class="text-muted mb-0">Presa in carico, monitoraggio e follow-up pazienti cronici</p>
                         </div>
-                        <div class="d-flex gap-2 flex-wrap justify-content-end">
+                        <div class="d-flex gap-2 flex-wrap justify-content-end jt-actions">
                             <button class="btn btn-primary" id="btnNewTherapy">
                                 <i class="fas fa-plus me-2"></i>Nuova terapia
                             </button>
@@ -49,7 +52,7 @@ include 'includes/header.php';
                     </div>
                 </div>
 
-                <div class="card mb-3">
+                <div class="card mb-3 jt-adesione-terapie__filters">
                     <div class="card-body">
                         <div class="row g-3 align-items-end">
                             <div class="col-md-4">
@@ -78,7 +81,7 @@ include 'includes/header.php';
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card jt-adesione-terapie__table">
                     <div class="card-body">
                         <div class="table-responsive">
                             <table class="table table-hover" id="therapiesTable">
@@ -106,19 +109,19 @@ include 'includes/header.php';
                             </table>
                         </div>
 
-                        <nav aria-label="Paginazione terapie">
+                        <nav class="jt-adesione-terapie__pagination" aria-label="Paginazione terapie">
                             <ul class="pagination justify-content-center" id="therapyPagination"></ul>
                         </nav>
                     </div>
                 </div>
-            </main>
-        </div>
-    </div>
 
-    <div id="therapyWizardModal"></div>
-    <div id="reminderModal"></div>
-    <div id="reportModal"></div>
-    <div id="followupModal"></div>
+                <div id="therapyWizardModal"></div>
+                <div id="reminderModal"></div>
+                <div id="reportModal"></div>
+                <div id="followupModal"></div>
+            </div>
+        </main>
+    </div>
 </div>
 
 <?php include 'includes/footer.php'; ?>

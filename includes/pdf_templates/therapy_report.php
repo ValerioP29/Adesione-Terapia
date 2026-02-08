@@ -11,8 +11,21 @@ function formatAnswer($value) {
     if ($value === null || $value === '') {
         return '-';
     }
-    if (is_array($value) || is_object($value)) {
-        return json_encode($value, JSON_UNESCAPED_UNICODE);
+    if (is_object($value)) {
+        $value = (array)$value;
+    }
+    if (is_array($value)) {
+        if (!$value) {
+            return '-';
+        }
+        if (array_values($value) === $value) {
+            return implode(', ', array_map('formatAnswer', $value));
+        }
+        $parts = [];
+        foreach ($value as $key => $item) {
+            $parts[] = $key . ': ' . formatAnswer($item);
+        }
+        return implode('; ', $parts);
     }
     if (is_bool($value)) {
         return $value ? 'Sì' : 'No';
@@ -35,6 +48,9 @@ $chronic = $reportData['chronic_care'] ?? [];
 $survey = $reportData['survey_base']['answers'] ?? [];
 $checkFollowups = $reportData['check_followups'] ?? [];
 $manualFollowups = $reportData['manual_followups'] ?? [];
+$mode = $reportData['mode'] ?? 'all';
+$showCheckSection = $mode === 'all' || ($checkFollowups && is_array($checkFollowups) && count($checkFollowups));
+$showFollowupSection = $mode === 'all' || ($manualFollowups && is_array($manualFollowups) && count($manualFollowups));
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -113,9 +129,9 @@ $manualFollowups = $reportData['manual_followups'] ?? [];
         <h2>Condizione e anamnesi</h2>
         <table>
             <tr><th>Condizione primaria</th><td><?= e($chronic['condition'] ?? '-') ?></td></tr>
-            <tr><th>Anamnesi generale</th><td><?= e(json_encode($chronic['general_anamnesis'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></td></tr>
-            <tr><th>Intake</th><td><?= e(json_encode($chronic['detailed_intake'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></td></tr>
-            <tr><th>Adherence base</th><td><?= e(json_encode($chronic['adherence_base'] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></td></tr>
+            <tr><th>Anamnesi generale</th><td><?= e(formatAnswer($chronic['general_anamnesis'] ?? [])) ?></td></tr>
+            <tr><th>Intake</th><td><?= e(formatAnswer($chronic['detailed_intake'] ?? [])) ?></td></tr>
+            <tr><th>Adherence base</th><td><?= e(formatAnswer($chronic['adherence_base'] ?? [])) ?></td></tr>
             <tr><th>Note iniziali</th><td><?= e($chronic['notes_initial'] ?? '-') ?></td></tr>
             <tr><th>Rischio</th><td><?= e($chronic['risk_score'] ?? '-') ?></td></tr>
         </table>
@@ -142,90 +158,94 @@ $manualFollowups = $reportData['manual_followups'] ?? [];
         <?php endif; ?>
     </div>
 
-    <div class="section">
-        <h2>Check periodici</h2>
-        <?php if ($checkFollowups && is_array($checkFollowups) && count($checkFollowups)): ?>
-            <?php foreach ($checkFollowups as $index => $followup):
-                $snapshot = $followup['snapshot'] ?? [];
-                $questions = $followup['questions'] ?? null;
-                $legacyQuestions = $snapshot['questions'] ?? [];
-                $custom = $snapshot['custom_questions'] ?? [];
-                $checkType = $followup['check_type'] ?? null;
-                $checkLabel = $checkType === 'initial' ? 'Iniziale' : 'Periodico';
-            ?>
-                <h3>Check <?= e($checkLabel) ?> #<?= e($followup['id'] ?? ($index + 1)) ?> - <?= e($followup['follow_up_date'] ?? $followup['created_at'] ?? '') ?></h3>
-                <table>
-                    <tr><th>Rischio</th><td><?= e($followup['risk_score'] ?? '-') ?></td></tr>
-                    <tr><th>Note farmacista</th><td><?= e($followup['pharmacist_notes'] ?? '-') ?></td></tr>
-                </table>
-                <h4>Domande</h4>
-                <?php if ($questions && is_array($questions) && count($questions)): ?>
+    <?php if ($showCheckSection): ?>
+        <div class="section">
+            <h2>Check periodici</h2>
+            <?php if ($checkFollowups && is_array($checkFollowups) && count($checkFollowups)): ?>
+                <?php foreach ($checkFollowups as $index => $followup):
+                    $snapshot = $followup['snapshot'] ?? [];
+                    $questions = $followup['questions'] ?? null;
+                    $legacyQuestions = $snapshot['questions'] ?? [];
+                    $custom = $snapshot['custom_questions'] ?? [];
+                    $checkType = $followup['check_type'] ?? null;
+                    $checkLabel = $checkType === 'initial' ? 'Iniziale' : 'Periodico';
+                ?>
+                    <h3>Check <?= e($checkLabel) ?> #<?= e($followup['id'] ?? ($index + 1)) ?> - <?= e($followup['follow_up_date'] ?? $followup['created_at'] ?? '') ?></h3>
                     <table>
-                        <thead><tr><th>Domanda</th><th>Risposta</th></tr></thead>
-                        <tbody>
-                            <?php foreach ($questions as $q): ?>
-                                <tr>
-                                    <td><?= e($q['text'] ?? $q['label'] ?? $q['key'] ?? '') ?></td>
-                                    <td><?= e(formatAnswer($q['answer'] ?? null)) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
+                        <tr><th>Rischio</th><td><?= e($followup['risk_score'] ?? '-') ?></td></tr>
+                        <tr><th>Note farmacista</th><td><?= e($followup['pharmacist_notes'] ?? '-') ?></td></tr>
                     </table>
-                <?php else: ?>
-                    <h4>Domande base</h4>
-                    <?php if ($legacyQuestions): ?>
+                    <h4>Domande</h4>
+                    <?php if ($questions && is_array($questions) && count($questions)): ?>
                         <table>
                             <thead><tr><th>Domanda</th><th>Risposta</th></tr></thead>
                             <tbody>
-                                <?php foreach ($legacyQuestions as $q): ?>
+                                <?php foreach ($questions as $q): ?>
                                     <tr>
-                                        <td><?= e($q['label'] ?? $q['text'] ?? $q['key'] ?? '') ?></td>
+                                        <td><?= e($q['text'] ?? $q['label'] ?? $q['key'] ?? '') ?></td>
                                         <td><?= e(formatAnswer($q['answer'] ?? null)) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     <?php else: ?>
-                        <p class="muted">Nessuna domanda base.</p>
-                    <?php endif; ?>
+                        <h4>Domande base</h4>
+                        <?php if ($legacyQuestions): ?>
+                            <table>
+                                <thead><tr><th>Domanda</th><th>Risposta</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($legacyQuestions as $q): ?>
+                                        <tr>
+                                            <td><?= e($q['label'] ?? $q['text'] ?? $q['key'] ?? '') ?></td>
+                                            <td><?= e(formatAnswer($q['answer'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <p class="muted">Nessuna domanda base.</p>
+                        <?php endif; ?>
 
-                    <h4>Domande personalizzate</h4>
-                    <?php if ($custom): ?>
-                        <table>
-                            <thead><tr><th>Domanda</th><th>Risposta</th></tr></thead>
-                            <tbody>
-                                <?php foreach ($custom as $q): ?>
-                                    <tr>
-                                        <td><?= e($q['label'] ?? $q['text'] ?? '') ?></td>
-                                        <td><?= e(formatAnswer($q['answer'] ?? null)) ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    <?php else: ?>
-                        <p class="muted">Nessuna domanda personalizzata.</p>
+                        <h4>Domande personalizzate</h4>
+                        <?php if ($custom): ?>
+                            <table>
+                                <thead><tr><th>Domanda</th><th>Risposta</th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($custom as $q): ?>
+                                        <tr>
+                                            <td><?= e($q['label'] ?? $q['text'] ?? '') ?></td>
+                                            <td><?= e(formatAnswer($q['answer'] ?? null)) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <p class="muted">Nessuna domanda personalizzata.</p>
+                        <?php endif; ?>
                     <?php endif; ?>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <p class="muted">Nessun check periodico disponibile.</p>
-        <?php endif; ?>
-    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <p class="muted">Nessun check periodico disponibile.</p>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
-    <div class="section">
-        <h2>Follow-up</h2>
-        <?php if ($manualFollowups && is_array($manualFollowups) && count($manualFollowups)): ?>
-            <?php foreach ($manualFollowups as $index => $followup): ?>
-                <h3>Follow-up #<?= e($followup['id'] ?? ($index + 1)) ?> - <?= e($followup['follow_up_date'] ?? $followup['created_at'] ?? '') ?></h3>
-                <table>
-                    <tr><th>Rischio</th><td><?= e($followup['risk_score'] ?? '-') ?></td></tr>
-                    <tr><th>Note farmacista</th><td><?= e($followup['pharmacist_notes'] ?? '-') ?></td></tr>
-                </table>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <p class="muted">Nessun follow-up disponibile.</p>
-        <?php endif; ?>
-    </div>
+    <?php if ($showFollowupSection): ?>
+        <div class="section">
+            <h2>Follow-up</h2>
+            <?php if ($manualFollowups && is_array($manualFollowups) && count($manualFollowups)): ?>
+                <?php foreach ($manualFollowups as $index => $followup): ?>
+                    <h3>Follow-up #<?= e($followup['id'] ?? ($index + 1)) ?> - <?= e($followup['follow_up_date'] ?? $followup['created_at'] ?? '') ?></h3>
+                    <table>
+                        <tr><th>Rischio</th><td><?= e($followup['risk_score'] ?? '-') ?></td></tr>
+                        <tr><th>Note farmacista</th><td><?= e($followup['pharmacist_notes'] ?? '-') ?></td></tr>
+                    </table>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <p class="muted">Nessun follow-up disponibile.</p>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
     <p class="muted">Report generato automaticamente dal sistema.</p>
 </body>

@@ -66,6 +66,17 @@ function getConditionQuestionLabel(condition, key) {
 
 function formatAnswerValue(value) {
     if (value === null || value === undefined || value === '') return '-';
+    if (Array.isArray(value)) {
+        if (!value.length) return '-';
+        return value.map((item) => formatAnswerValue(item)).join(', ');
+    }
+    if (typeof value === 'object') {
+        const entries = Object.entries(value);
+        if (!entries.length) return '-';
+        return entries
+            .map(([key, val]) => `${key}: ${formatAnswerValue(val)}`)
+            .join('; ');
+    }
     if (typeof value === 'boolean') return value ? 'Sì' : 'No';
     if (value === 'true' || value === '1' || value === 1) return 'Sì';
     if (value === 'false' || value === '0' || value === 0) return 'No';
@@ -644,16 +655,18 @@ function showReminderToast(message, type = 'success') {
         document.body.appendChild(container);
     }
 
-    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    const bgClass = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger';
+    const textClass = type === 'warning' ? 'text-dark' : 'text-white';
     const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white ${bgClass} border-0`;
+    const closeClass = type === 'warning' ? 'btn-close' : 'btn-close btn-close-white';
+    toast.className = `toast align-items-center ${textClass} ${bgClass} border-0`;
     toast.setAttribute('role', 'alert');
     toast.setAttribute('aria-live', 'assertive');
     toast.setAttribute('aria-atomic', 'true');
     toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">${sanitizeHtml(message)}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            <button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     `;
 
@@ -1362,7 +1375,9 @@ async function saveAnswers() {
         return;
     }
     const inputs = document.querySelectorAll('.check-question-input');
-    const answers = [];
+    const answersToSend = [];
+    let hasProvidedAnswer = false;
+    let hasClearOnly = false;
 
     inputs.forEach((input) => {
         const questionId = input.dataset.questionId;
@@ -1376,18 +1391,58 @@ async function saveAnswers() {
         if (input.type === 'text' && input.value === '') {
             value = null;
         }
-        answers.push({ question_id: Number(questionId), answer: value });
+        const hasValue = value !== null && value !== undefined && value !== '';
+        const hadSavedValue =
+            activeChecklistAnswers?.[questionId] !== null &&
+            activeChecklistAnswers?.[questionId] !== undefined &&
+            activeChecklistAnswers?.[questionId] !== '';
+        if (hasValue) {
+            hasProvidedAnswer = true;
+            answersToSend.push({ question_id: Number(questionId), answer: value });
+            return;
+        }
+        if (hadSavedValue) {
+            hasClearOnly = true;
+            answersToSend.push({ question_id: Number(questionId), answer: value });
+        }
     });
+
+    if (!answersToSend.length) {
+        showFollowupToast('Nessuna risposta selezionata', 'warning');
+        return;
+    }
 
     try {
         const response = await fetch(`api/followups.php?action=check-answers&id=${activeFollowupId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers })
+            body: JSON.stringify({ answers: answersToSend })
         });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            if (response.status === 422 && payload?.error === 'Nessuna risposta inviata') {
+                showFollowupToast('Nessuna risposta selezionata', 'warning');
+                return;
+            }
+            alert(payload?.error || 'Errore nel salvataggio delle risposte');
+            return;
+        }
         const result = await response.json();
         if (result.success) {
-            activeChecklistAnswers = result.data?.answers || activeChecklistAnswers;
+            const returnedAnswers = result.data?.answers || {};
+            if (!Object.keys(returnedAnswers).length) {
+                if (hasProvidedAnswer) {
+                    console.error('Risposte checklist vuote dopo salvataggio', result);
+                    alert('Errore: risposte non salvate correttamente. Riprova.');
+                    return;
+                }
+            }
+            if (Object.keys(returnedAnswers).length) {
+                activeChecklistAnswers = returnedAnswers;
+            } else if (!hasClearOnly) {
+                showFollowupToast('Nessuna risposta selezionata', 'warning');
+                return;
+            }
             renderCheckQuestions();
             const therapyId = document.getElementById('checkTherapySelect')?.value;
             loadCheckFollowups(therapyId);
@@ -1458,16 +1513,18 @@ function showFollowupToast(message, type = 'success') {
         document.body.appendChild(container);
     }
 
-    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    const bgClass = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger';
+    const textClass = type === 'warning' ? 'text-dark' : 'text-white';
     const toast = document.createElement('div');
-    toast.className = `toast align-items-center text-white ${bgClass} border-0`;
+    const closeClass = type === 'warning' ? 'btn-close' : 'btn-close btn-close-white';
+    toast.className = `toast align-items-center ${textClass} ${bgClass} border-0`;
     toast.setAttribute('role', 'alert');
     toast.setAttribute('aria-live', 'assertive');
     toast.setAttribute('aria-atomic', 'true');
     toast.innerHTML = `
         <div class="d-flex">
             <div class="toast-body">${sanitizeHtml(message)}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            <button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     `;
     container.appendChild(toast);
@@ -1724,9 +1781,9 @@ function buildQuestionListHtml(questions = [], condition = null) {
             : q.custom || !q.key
                 ? q.key || 'Domanda'
                 : getConditionQuestionLabel(condition, q.key);
-        return `<li class="list-group-item d-flex justify-content-between align-items-start">
-            <div class="me-3">${sanitizeHtml(label || '')}</div>
-            <span class="fw-semibold">${sanitizeHtml(formatAnswerValue(q.answer))}</span>
+        return `<li class="list-group-item">
+            <div><strong>Domanda:</strong> ${sanitizeHtml(label || '')}</div>
+            <div><strong>Risposta:</strong> ${sanitizeHtml(formatAnswerValue(q.answer))}</div>
         </li>`;
     });
     return `<ul class="list-group list-group-flush">${rows.join('')}</ul>`;
@@ -1740,9 +1797,9 @@ function buildSurveyHtml(survey = {}, condition = null) {
     }
     const rows = entries.map(([key, value]) => {
         const label = getConditionQuestionLabel(condition, key);
-        return `<li class="list-group-item d-flex justify-content-between align-items-start">
-            <div class="me-3">${sanitizeHtml(label)}</div>
-            <span class="fw-semibold">${sanitizeHtml(formatAnswerValue(value))}</span>
+        return `<li class="list-group-item">
+            <div><strong>Domanda:</strong> ${sanitizeHtml(label)}</div>
+            <div><strong>Risposta:</strong> ${sanitizeHtml(formatAnswerValue(value))}</div>
         </li>`;
     });
     return `<ul class="list-group list-group-flush">${rows.join('')}</ul>`;
@@ -1836,6 +1893,8 @@ function buildReportPreviewHtml(content) {
     const checkFollowups = Array.isArray(content.check_followups) ? content.check_followups : [];
     const manualFollowups = Array.isArray(content.manual_followups) ? content.manual_followups : [];
 
+    const showCheckSection = content.mode === 'all' || checkFollowups.length;
+    const showFollowupSection = content.mode === 'all' || manualFollowups.length;
     const checkHtml = checkFollowups.length
         ? checkFollowups.map((f) => buildFollowupHtml(f, condition)).join('')
         : '<div class="text-muted small">Nessun check periodico</div>';
@@ -1907,16 +1966,18 @@ function buildReportPreviewHtml(content) {
             </div>
 
             <!-- CHECK PERIODICI -->
+            ${showCheckSection ? `
             <div>
                 <h6 class="mb-2">Check periodici</h6>
                 ${checkHtml}
-            </div>
+            </div>` : ''}
 
             <!-- FOLLOW-UP -->
+            ${showFollowupSection ? `
             <div class="mt-4">
                 <h6 class="mb-2">Follow-up</h6>
                 ${followupHtml}
-            </div>
+            </div>` : ''}
 
         </div>
     `;

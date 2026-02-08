@@ -11,11 +11,21 @@ function formatAnswer($value) {
     if ($value === null || $value === '') {
         return '-';
     }
-    if (is_array($value) || is_object($value)) {
-        if (is_array($value) && array_values($value) === $value) {
-            return implode(', ', array_map('strval', $value));
+    if (is_object($value)) {
+        $value = (array)$value;
+    }
+    if (is_array($value)) {
+        if (!$value) {
+            return '-';
         }
-        return json_encode($value, JSON_UNESCAPED_UNICODE);
+        if (array_values($value) === $value) {
+            return implode(', ', array_map('formatAnswer', $value));
+        }
+        $parts = [];
+        foreach ($value as $key => $item) {
+            $parts[] = $key . ': ' . formatAnswer($item);
+        }
+        return implode('; ', $parts);
     }
     if (is_bool($value)) {
         return $value ? 'Sì' : 'No';

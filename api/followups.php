@@ -296,9 +296,22 @@ switch ($method) {
             }
             $therapyId = $followup['therapy_id'] ?? null;
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
-            $answers = $input['answers'] ?? [];
-            if (!is_array($answers)) {
-                respondFollowups(false, null, 'Formato risposte non valido', 400);
+            if (!array_key_exists('answers', $input) || !is_array($input['answers'])) {
+                respondFollowups(false, null, 'Formato risposte non valido', 422);
+            }
+            $answers = $input['answers'];
+            if (count($answers) === 0) {
+                respondFollowups(false, null, 'Nessuna risposta inviata', 422);
+            }
+            $meaningfulCount = 0;
+            foreach ($answers as $answer) {
+                $value = $answer['answer'] ?? null;
+                if ($value !== null && $value !== '') {
+                    $meaningfulCount++;
+                }
+            }
+            if ($meaningfulCount === 0) {
+                respondFollowups(false, null, 'Nessuna risposta inviata', 422);
             }
 
             try {
@@ -366,6 +379,19 @@ switch ($method) {
                 respondFollowups(false, null, 'Errore salvataggio risposte', 500);
             }
             $answersMap = fetchChecklistAnswers($followup_id);
+            if ($meaningfulCount > 0 && (!$answersMap || !is_array($answersMap) || count($answersMap) === 0)) {
+                $sampleIds = array_values(array_map(function ($answer) {
+                    return $answer['question_id'] ?? null;
+                }, array_slice($answers, 0, 3)));
+                error_log('check-answers empty map: ' . json_encode([
+                    'followup_id' => $followup_id,
+                    'therapy_id' => $therapyId,
+                    'answers_sent' => count($answers),
+                    'meaningful_answers' => $meaningfulCount,
+                    'sample_question_ids' => $sampleIds
+                ]));
+                respondFollowups(false, null, 'Risposte non salvate correttamente', 500);
+            }
             respondFollowups(true, ['answers' => $answersMap]);
         }
 

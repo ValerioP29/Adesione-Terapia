@@ -14,6 +14,7 @@ let activeFollowupData = null;
 let activeFollowups = [];
 let activeChecklistQuestions = [];
 let activeChecklistAnswers = {};
+let activeTherapyMetadata = null;
 let surveyTemplatesPromise = null;
 
 function ensureSurveyTemplatesLoaded() {
@@ -169,7 +170,7 @@ function attachToolbarActions() {
     if (btnNewTherapy) btnNewTherapy.addEventListener('click', () => openTherapyWizard());
     if (btnReminder) btnReminder.addEventListener('click', () => openRemindersModal());
     if (btnReport) btnReport.addEventListener('click', () => openReportsModal());
-    if (btnFollowup) btnFollowup.addEventListener('click', () => openCheckPeriodicoModal());
+    if (btnFollowup) btnFollowup.addEventListener('click', () => openCheckModal());
 }
 
 function attachFilterActions() {
@@ -263,7 +264,7 @@ function renderTherapyRows(items) {
                     <button class="btn btn-sm btn-outline-secondary" data-therapy-id="${item.id}" title="Report" onclick="openReportsModal(${item.id})">
                         <i class="fas fa-file-alt"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" data-therapy-id="${item.id}" title="Check periodico" onclick="openFollowupModal(${item.id})">
+                    <button class="btn btn-sm btn-outline-secondary" data-therapy-id="${item.id}" title="Check periodico" onclick="openCheckModal({ therapyId: ${item.id} })">
                         <i class="fas fa-stethoscope"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-success" data-therapy-id="${item.id}" title="Scarica PDF terapia" onclick="downloadTherapyPdf(${item.id})">
@@ -726,7 +727,7 @@ async function cancelFollowup(followupId, therapyId = null) {
     }
 }
 
-async function openCheckPeriodicoModal(therapyId = null) {
+async function openCheckModal({ therapyId = null } = {}) {
     if (!followupModalContainer) return;
 
     followupModalContainer.innerHTML = `
@@ -829,64 +830,113 @@ async function openCheckPeriodicoModal(therapyId = null) {
     modal.show();
 }
 
-async function loadCheckFollowups(therapyId) {
-    const historyBody = document.getElementById('checkHistoryBody');
-    const questionList = document.getElementById('checkQuestionList');
-    if (!historyBody || !questionList) return;
+function resetCheckModalState() {
     activeFollowupId = null;
     activeFollowupData = null;
     activeFollowups = [];
     activeChecklistQuestions = [];
     activeChecklistAnswers = {};
+    activeTherapyMetadata = null;
+}
+
+function setCheckModalLoadingState({ therapySelected, message } = {}) {
+    const historyBody = document.getElementById('checkHistoryBody');
+    const questionList = document.getElementById('checkQuestionList');
+    if (!historyBody || !questionList) return;
     renderCheckMetaForm(null);
 
-    if (!therapyId) {
+    if (!therapySelected) {
         historyBody.innerHTML = '<tr><td colspan="6" class="text-muted">Seleziona una terapia per proseguire</td></tr>';
-        questionList.innerHTML = '<div class="text-muted">Nessun check disponibile</div>';
+        questionList.innerHTML = '<div class="text-muted">Seleziona una terapia per caricare il check.</div>';
         return;
     }
 
-    historyBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Caricamento...</td></tr>';
-    questionList.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+    const loadingMessage = message || 'Caricamento...';
+    historyBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">${sanitizeHtml(loadingMessage)}</td></tr>`;
+    questionList.innerHTML = `<div class="text-center text-muted">${sanitizeHtml(loadingMessage)}</div>`;
+}
+
+async function fetchTherapyMetadata(therapyId) {
+    if (!therapyId) return null;
+    try {
+        const response = await fetch(`api/therapies.php?id=${therapyId}`);
+        const result = await response.json();
+        if (!result.success) return null;
+        const data = result.data?.items || result.data || [];
+        if (Array.isArray(data)) {
+            return data[0] || null;
+        }
+        return data;
+    } catch (error) {
+        console.error('Errore caricamento metadata terapia', error);
+        return null;
+    }
+}
+
+async function fetchChecklistQuestions(therapyId) {
+    if (!therapyId) return [];
+    try {
+        const response = await fetch(`api/followups.php?action=checklist&therapy_id=${therapyId}`);
+        const result = await response.json();
+        if (!result.success) return [];
+        return result.data?.questions || [];
+    } catch (error) {
+        console.error(error);
+        return [];
+    }
+}
+
+async function fetchCheckFollowups(therapyId) {
+    if (!therapyId) return [];
+    const response = await fetch(`api/followups.php?therapy_id=${therapyId}&entry_type=check`);
+    const result = await response.json();
+    if (!result.success) {
+        throw new Error(result.error || 'Errore nel caricamento');
+    }
+    return result.data?.items || [];
+}
+
+async function loadCheckFollowups(therapyId) {
+    const historyBody = document.getElementById('checkHistoryBody');
+    const questionList = document.getElementById('checkQuestionList');
+    if (!historyBody || !questionList) return;
+
+    resetCheckModalState();
+
+    if (!therapyId) {
+        setCheckModalLoadingState({ therapySelected: false });
+        return;
+    }
+
+    setCheckModalLoadingState({ therapySelected: true });
 
     try {
-        const response = await fetch(`api/followups.php?therapy_id=${therapyId}&entry_type=check`);
-        const result = await response.json();
-        if (!result.success) {
-            historyBody.innerHTML = `<tr><td colspan="6" class="text-danger">${sanitizeHtml(result.error || 'Errore nel caricamento')}</td></tr>`;
-            questionList.innerHTML = '<div class="text-danger">Errore nel caricamento</div>';
-            return;
-        }
+        const [metadata, questions, items] = await Promise.all([
+            fetchTherapyMetadata(therapyId),
+            fetchChecklistQuestions(therapyId),
+            fetchCheckFollowups(therapyId)
+        ]);
 
-        const items = result.data?.items || [];
+        activeTherapyMetadata = metadata;
+        activeChecklistQuestions = questions;
         activeFollowups = items;
         renderCheckHistory(items);
-        await loadChecklistQuestions(therapyId);
+        renderCheckQuestions();
+
         const active = items.find((f) => f.status !== 'canceled') || items[0];
         if (active) {
             await setActiveFollowup(active);
         } else {
-            questionList.innerHTML = '<div class="text-muted">Nessun check periodico. Creane uno nuovo.</div>';
+            activeFollowupId = null;
+            activeFollowupData = null;
+            activeChecklistAnswers = {};
+            renderCheckQuestions();
+            renderCheckMetaForm(null);
         }
     } catch (error) {
         console.error(error);
         historyBody.innerHTML = '<tr><td colspan="6" class="text-danger">Errore di rete</td></tr>';
         questionList.innerHTML = '<div class="text-danger">Errore di rete</div>';
-    }
-}
-
-async function loadChecklistQuestions(therapyId) {
-    try {
-        const response = await fetch(`api/followups.php?action=checklist&therapy_id=${therapyId}`);
-        const result = await response.json();
-        if (!result.success) {
-            activeChecklistQuestions = [];
-            return;
-        }
-        activeChecklistQuestions = result.data?.questions || [];
-    } catch (error) {
-        console.error(error);
-        activeChecklistQuestions = [];
     }
 }
 
@@ -1086,7 +1136,7 @@ async function addCustomQuestion() {
         });
         const result = await response.json();
         if (result.success) {
-            await loadChecklistQuestions(therapyId);
+            activeChecklistQuestions = await fetchChecklistQuestions(therapyId);
             renderCheckQuestions();
             if (textInput) textInput.value = '';
             showFollowupToast('Domanda aggiunta', 'success');
@@ -1114,7 +1164,7 @@ async function removeChecklistQuestion(questionId) {
         });
         const result = await response.json();
         if (result.success) {
-            await loadChecklistQuestions(therapyId);
+            activeChecklistQuestions = await fetchChecklistQuestions(therapyId);
             renderCheckQuestions();
             showFollowupToast('Domanda rimossa', 'success');
         } else {

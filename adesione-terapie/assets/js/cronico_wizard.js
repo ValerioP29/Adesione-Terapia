@@ -2501,7 +2501,7 @@ async function submitTherapy() {
         });
         const data = await resp.json();
         if (data.success) {
-            alert('Terapia salvata con successo');
+            showWizardToast(isEdit ? 'Terapia aggiornata' : 'Terapia salvata', 'success');
             const savedTherapyId = data.data?.therapy_id ?? currentTherapyId;
             clearWizardDraft();
             if (savedTherapyId && savedTherapyId !== currentTherapyId) {
@@ -2516,10 +2516,11 @@ async function submitTherapy() {
                 loadTherapies();
             }
         } else {
-            alert(data.error || 'Errore salvataggio terapia');
+            const errorMessage = data?.error || data?.message || 'Errore aggiornamento terapia';
+            showWizardToast(errorMessage, 'error');
         }
     } catch (err) {
-        alert('Errore di rete');
+        showWizardToast('Errore di rete nel salvataggio terapia', 'error');
     }
 }
 
@@ -2561,10 +2562,11 @@ function ensureWizardToastContainer() {
     return container;
 }
 
-function showWizardToast(message) {
+function showWizardToast(message, type = 'success') {
     const container = ensureWizardToastContainer();
     const toastEl = document.createElement('div');
-    toastEl.className = 'toast align-items-center text-bg-success border-0';
+    const bgClass = type === 'error' ? 'bg-danger' : 'bg-success';
+    toastEl.className = `toast align-items-center text-white ${bgClass} border-0`;
     toastEl.setAttribute('role', 'alert');
     toastEl.setAttribute('aria-live', 'assertive');
     toastEl.setAttribute('aria-atomic', 'true');
@@ -2650,14 +2652,15 @@ async function saveCurrentStep() {
         });
         const data = await resp.json();
         if (data.success) {
-            showWizardToast('Salvato');
+            showWizardToast('Terapia aggiornata', 'success');
             await refreshTherapyStateFromServer();
             persistWizardDraft({ immediate: true, collectCurrent: false });
         } else {
-            alert(data.error || 'Errore salvataggio terapia');
+            const errorMessage = data?.error || data?.message || 'Errore aggiornamento terapia';
+            showWizardToast(errorMessage, 'error');
         }
     } catch (err) {
-        alert('Errore di rete');
+        showWizardToast('Errore di rete nel salvataggio terapia', 'error');
     }
 }
 

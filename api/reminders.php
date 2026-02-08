@@ -66,6 +66,18 @@ function parseReminderDateTime($value, DateTimeZone $timezone) {
     return null;
 }
 
+function normalizeReminderFrequency($value) {
+    $raw = strtolower(trim((string) $value));
+    $map = [
+        'one-shot' => 'one_shot',
+        'one shot' => 'one_shot',
+        'once' => 'one_shot',
+        'bi-weekly' => 'biweekly',
+        'bi weekly' => 'biweekly'
+    ];
+    return $map[$raw] ?? $raw;
+}
+
 function addMonthsKeepDay(DateTime $date, $months) {
     $day = (int) $date->format('d');
     $time = $date->format('H:i:s');
@@ -81,7 +93,7 @@ function addMonthsKeepDay(DateTime $date, $months) {
 }
 
 function computeNextDueAt(array $reminder, DateTimeZone $timezone) {
-    $frequency = $reminder['frequency'] ?? 'one_shot';
+    $frequency = normalizeReminderFrequency($reminder['frequency'] ?? 'one_shot');
     $intervalValue = (int) ($reminder['interval_value'] ?? 1);
     if ($intervalValue < 1) {
         $intervalValue = 1;
@@ -112,6 +124,24 @@ $pharmacy_id = get_panel_pharma_id(true);
 
 switch ($method) {
     case 'GET':
+        $reminder_id = $_GET['id'] ?? null;
+        if ($reminder_id) {
+            try {
+                $reminder = db_fetch_one(
+                    "SELECT r.*, t.therapy_title, t.patient_id FROM jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id WHERE r.id = ? AND t.pharmacy_id = ?",
+                    [$reminder_id, $pharmacy_id]
+                );
+                if (!$reminder) {
+                    respondReminders(false, null, 'Promemoria non trovato', 404);
+                }
+                respondReminders(true, ['item' => $reminder]);
+            } catch (Exception $e) {
+                respondReminders(false, null, 'Errore recupero promemoria', 500, [
+                    'details' => ['message' => $e->getMessage()]
+                ]);
+            }
+        }
+
         $view = $_GET['view'] ?? null;
         if ($view !== 'agenda') {
             respondReminders(false, null, 'view=agenda richiesto', 400);
@@ -223,12 +253,14 @@ switch ($method) {
                 }
 
                 $timezone = new DateTimeZone('Europe/Rome');
-                if (($reminder['frequency'] ?? 'one_shot') === 'one_shot') {
+                $frequency = normalizeReminderFrequency($reminder['frequency'] ?? 'one_shot');
+                if ($frequency === 'one_shot') {
                     db_query(
                         "UPDATE jta_therapy_reminders SET status = 'done' WHERE id = ?",
                         [$reminder_id]
                     );
                 } else {
+                    $reminder['frequency'] = $frequency;
                     $nextDueAt = computeNextDueAt($reminder, $timezone);
                     if (!$nextDueAt) {
                         respondReminders(false, null, 'Impossibile calcolare la prossima scadenza', 422);
@@ -270,7 +302,7 @@ switch ($method) {
         }
         $therapy_id = $input['therapy_id'] ?? null;
         $title = trim((string) ($input['title'] ?? ''));
-        $frequency = $input['frequency'] ?? null;
+        $frequency = normalizeReminderFrequency($input['frequency'] ?? null);
         $firstDueRaw = $input['first_due_at'] ?? null;
         if (!$therapy_id || $title === '' || !$frequency || !$firstDueRaw) {
             respondReminders(false, null, 'Campi obbligatori mancanti', 400);
@@ -346,6 +378,161 @@ switch ($method) {
                 $details['code'] = $e->getCode();
             }
             respondReminders(false, null, 'Errore creazione promemoria', 500, [
+                'details' => $details
+            ]);
+        }
+        break;
+
+    case 'PUT':
+    case 'PATCH':
+        $reminder_id = $_GET['id'] ?? null;
+        if (!$reminder_id) {
+            respondReminders(false, null, 'id promemoria richiesto', 400);
+        }
+
+        $rawBody = file_get_contents('php://input');
+        $input = json_decode($rawBody, true);
+        if ($input === null && json_last_error() !== JSON_ERROR_NONE) {
+            respondReminders(false, null, 'JSON non valido', 400);
+        }
+        if (!is_array($input)) {
+            respondReminders(false, null, 'JSON non valido', 400);
+        }
+        $therapy_id = $input['therapy_id'] ?? null;
+        $title = trim((string) ($input['title'] ?? ''));
+        $frequency = normalizeReminderFrequency($input['frequency'] ?? null);
+        $firstDueRaw = $input['first_due_at'] ?? null;
+        if (!$therapy_id || $title === '' || !$frequency || !$firstDueRaw) {
+            respondReminders(false, null, 'Campi obbligatori mancanti', 400);
+        }
+
+        $allowedFrequencies = ['one_shot', 'weekly', 'biweekly', 'monthly'];
+        if (!in_array($frequency, $allowedFrequencies, true)) {
+            respondReminders(false, null, 'Tipo promemoria non valido', 422);
+        }
+
+        $timezone = new DateTimeZone('Europe/Rome');
+        $firstDueAt = parseReminderDateTime($firstDueRaw, $timezone);
+        if (!$firstDueAt) {
+            respondReminders(false, null, 'Formato data/ora non valido', 422, [
+                'code' => 'REMINDER_INVALID_DATETIME',
+                'message' => 'Formato data/ora non valido.',
+                'details' => ['first_due_at' => $firstDueRaw]
+            ]);
+        }
+
+        $weekday = $input['weekday'] ?? null;
+        if ($frequency === 'weekly') {
+            if ($weekday === null || $weekday === '') {
+                $weekday = (int) $firstDueAt->format('N');
+            }
+            $weekday = (int) $weekday;
+            if ($weekday < 1 || $weekday > 7) {
+                respondReminders(false, null, 'Weekday non valido', 422);
+            }
+        } else {
+            $weekday = null;
+        }
+
+        $intervalValue = (int) ($input['interval_value'] ?? 1);
+        if ($intervalValue < 1) {
+            $intervalValue = 1;
+        }
+
+        try {
+            $reminder = db_fetch_one(
+                "SELECT r.* FROM jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id WHERE r.id = ? AND t.pharmacy_id = ?",
+                [$reminder_id, $pharmacy_id]
+            );
+            if (!$reminder) {
+                respondReminders(false, null, 'Promemoria non trovato', 404);
+            }
+
+            $therapy = db_fetch_one("SELECT id FROM jta_therapies WHERE id = ? AND pharmacy_id = ?", [$therapy_id, $pharmacy_id]);
+            if (!$therapy) {
+                respondReminders(false, null, 'Terapia non trovata per la farmacia', 400);
+            }
+
+            $firstDueFormatted = $firstDueAt->format('Y-m-d H:i:s');
+            $existingFirstDue = $reminder['first_due_at'] ?? null;
+            $nextDueAtValue = $firstDueFormatted;
+            if ($existingFirstDue && $existingFirstDue === $firstDueFormatted) {
+                $nextDueAtValue = $reminder['next_due_at'] ?? $firstDueFormatted;
+            }
+
+            db_query(
+                "UPDATE jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id SET r.therapy_id = ?, r.title = ?, r.description = ?, r.frequency = ?, r.interval_value = ?, r.weekday = ?, r.first_due_at = ?, r.next_due_at = ? WHERE r.id = ? AND t.pharmacy_id = ?",
+                [
+                    $therapy_id,
+                    sanitize($title),
+                    isset($input['description']) && trim((string) $input['description']) !== '' ? sanitize($input['description']) : null,
+                    $frequency,
+                    $intervalValue,
+                    $weekday,
+                    $firstDueFormatted,
+                    $nextDueAtValue,
+                    $reminder_id,
+                    $pharmacy_id
+                ]
+            );
+
+            $updated = db_fetch_one(
+                "SELECT r.* FROM jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id WHERE r.id = ? AND t.pharmacy_id = ?",
+                [$reminder_id, $pharmacy_id]
+            );
+            respondReminders(true, ['item' => $updated]);
+        } catch (Exception $e) {
+            $logTherapyId = $therapy_id ?? 'null';
+            error_log(
+                "reminders.php ERROR pharmacy={$pharmacy_id} therapy={$logTherapyId} update: " . $e->getMessage()
+            );
+            $details = ['message' => $e->getMessage()];
+            if ($e->getCode()) {
+                $details['code'] = $e->getCode();
+            }
+            respondReminders(false, null, 'Errore aggiornamento promemoria', 500, [
+                'details' => $details
+            ]);
+        }
+        break;
+
+    case 'DELETE':
+        $reminder_id = $_GET['id'] ?? null;
+        if (!$reminder_id) {
+            respondReminders(false, null, 'id promemoria richiesto', 400);
+        }
+
+        try {
+            $reminder = db_fetch_one(
+                "SELECT r.* FROM jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id WHERE r.id = ? AND t.pharmacy_id = ?",
+                [$reminder_id, $pharmacy_id]
+            );
+
+            if (!$reminder) {
+                respondReminders(false, null, 'Promemoria non trovato', 404);
+            }
+
+            db_query(
+                "UPDATE jta_therapy_reminders SET status = 'cancelled' WHERE id = ? AND therapy_id IN (SELECT id FROM jta_therapies WHERE pharmacy_id = ?)",
+                [$reminder_id, $pharmacy_id]
+            );
+
+            $updated = db_fetch_one(
+                "SELECT r.* FROM jta_therapy_reminders r JOIN jta_therapies t ON r.therapy_id = t.id WHERE r.id = ? AND t.pharmacy_id = ?",
+                [$reminder_id, $pharmacy_id]
+            );
+
+            respondReminders(true, ['item' => $updated]);
+        } catch (Exception $e) {
+            $logTherapyId = isset($reminder['therapy_id']) ? $reminder['therapy_id'] : 'null';
+            error_log(
+                "reminders.php ERROR pharmacy={$pharmacy_id} therapy={$logTherapyId} delete: " . $e->getMessage()
+            );
+            $details = ['message' => $e->getMessage()];
+            if ($e->getCode()) {
+                $details['code'] = $e->getCode();
+            }
+            respondReminders(false, null, 'Errore eliminazione promemoria', 500, [
                 'details' => $details
             ]);
         }

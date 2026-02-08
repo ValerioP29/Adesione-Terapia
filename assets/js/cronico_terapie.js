@@ -9,6 +9,8 @@ const therapyResultsInfo = document.getElementById('therapyResultsInfo');
 const reminderModalContainer = document.getElementById('reminderModal');
 const reportModalContainer = document.getElementById('reportModal');
 const followupModalContainer = document.getElementById('followupModal');
+const reminderCache = new Map();
+const reminderFormState = { editingId: null };
 let activeFollowupId = null;
 let activeFollowupData = null;
 let activeFollowups = [];
@@ -316,6 +318,35 @@ function renderPagination(items) {
     therapyPagination.innerHTML = `${prevItem}${currentItem}${nextItem}`;
 }
 
+function formatReminderDateTimeInput(value) {
+    if (!value) return '';
+    const normalized = value.replace(' ', 'T');
+    return normalized.length >= 16 ? normalized.slice(0, 16) : normalized;
+}
+
+function setReminderFormMode(form, isEditing) {
+    const title = document.getElementById('reminderFormTitle');
+    const resetBtn = document.getElementById('reminderFormReset');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (title) {
+        title.textContent = isEditing ? 'Modifica promemoria' : 'Nuovo promemoria';
+    }
+    if (submitBtn) {
+        submitBtn.textContent = isEditing ? 'Aggiorna promemoria' : 'Salva promemoria';
+    }
+    if (resetBtn) {
+        resetBtn.classList.toggle('d-none', !isEditing);
+    }
+}
+
+function resetReminderForm(form) {
+    if (!form) return;
+    form.reset();
+    form.reminder_id.value = '';
+    reminderFormState.editingId = null;
+    setReminderFormMode(form, false);
+}
+
 function attachReminderForm(therapySelect) {
     const form = document.getElementById('reminderForm');
     const weekdayWrapper = document.getElementById('reminderWeekdayWrapper');
@@ -333,6 +364,7 @@ function attachReminderForm(therapySelect) {
 
     form.frequency?.addEventListener('change', toggleWeekday);
     toggleWeekday();
+    setReminderFormMode(form, false);
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -346,13 +378,18 @@ function attachReminderForm(therapySelect) {
             title: form.title.value.trim(),
             description: form.description.value.trim(),
             frequency: form.frequency.value,
+            interval_value: form.interval_value.value || 1,
             first_due_at: form.first_due_at.value,
             weekday: form.frequency.value === 'weekly' ? form.weekday.value : null
         };
+        const reminderId = form.reminder_id?.value || null;
+        const isEditing = Boolean(reminderId);
+        const endpoint = isEditing ? `api/reminders.php?id=${reminderId}` : 'api/reminders.php';
+        const method = isEditing ? 'PUT' : 'POST';
 
         try {
-            const response = await fetch('api/reminders.php', {
-                method: 'POST',
+            const response = await fetch(endpoint, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -362,9 +399,13 @@ function attachReminderForm(therapySelect) {
                 return;
             }
             if (result?.success) {
-                form.reset();
+                if (isEditing) {
+                    showReminderToast('Promemoria aggiornato correttamente', 'success');
+                } else {
+                    showReminderToast('Promemoria salvato correttamente', 'success');
+                }
+                resetReminderForm(form);
                 toggleWeekday();
-                showReminderToast('Promemoria salvato correttamente', 'success');
                 loadReminders(therapyId);
             } else {
                 showReminderToast(result?.message || result?.error || 'Errore nel salvataggio del promemoria', 'error');
@@ -374,6 +415,22 @@ function attachReminderForm(therapySelect) {
             showReminderToast('Errore di rete nel salvataggio del promemoria', 'error');
         }
     });
+
+    const resetBtn = document.getElementById('reminderFormReset');
+    resetBtn?.addEventListener('click', () => {
+        resetReminderForm(form);
+        toggleWeekday();
+    });
+}
+
+function parseMysqlDateTime(value) {
+    if (!value) return null;
+    const [datePart, timePart = '00:00:00'] = value.split(' ');
+    if (!datePart) return null;
+    const [year, month, day] = datePart.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number);
+    return new Date(year, month - 1, day, hour, minute, second);
 }
 
 async function loadReminders(therapyId) {
@@ -383,6 +440,7 @@ async function loadReminders(therapyId) {
         list.innerHTML = '<div class="text-muted">Seleziona una terapia per visualizzare i promemoria</div>';
         return;
     }
+    reminderCache.clear();
     list.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
     try {
         const response = await fetch(`api/reminders.php?view=agenda&therapy_id=${therapyId}`);
@@ -394,16 +452,31 @@ async function loadReminders(therapyId) {
         const overdue = result.data?.overdue || [];
         const today = result.data?.today || [];
         const upcoming = result.data?.upcoming || [];
+        [...overdue, ...today, ...upcoming].forEach((reminder) => {
+            if (reminder?.id !== undefined && reminder?.id !== null) {
+                reminderCache.set(String(reminder.id), reminder);
+            }
+        });
         if (!overdue.length && !today.length && !upcoming.length) {
             list.innerHTML = '<div class="text-muted">Nessun promemoria in agenda</div>';
             return;
         }
+        upcoming.sort((a, b) => {
+            const dateA = parseMysqlDateTime(a.next_due_at) || new Date(0);
+            const dateB = parseMysqlDateTime(b.next_due_at) || new Date(0);
+            return dateA - dateB;
+        });
         const sections = [
-            { key: 'Scaduti', items: overdue },
-            { key: 'Oggi', items: today },
-            { key: 'Prossimi', items: upcoming }
+            { key: 'Oggi', type: 'today', items: today },
+            { key: 'Prossimi', type: 'upcoming', items: upcoming },
+            { key: 'Scaduti', type: 'overdue', items: overdue }
         ];
-        list.innerHTML = sections.map((section) => renderAgendaSection(section.key, section.items, therapyId)).join('');
+        const accordionId = `reminderAccordion-${therapyId}`;
+        list.innerHTML = `
+            <div class="accordion" id="${accordionId}">
+                ${sections.map((section, index) => renderAgendaSection(section, therapyId, accordionId, index === 0)).join('')}
+            </div>
+        `;
     } catch (error) {
         console.error(error);
         list.innerHTML = '<div class="text-danger">Errore di rete</div>';
@@ -422,7 +495,13 @@ function renderReminderStatusBadge(status) {
     return `<span class="badge ${cls}">${sanitizeHtml(label)}</span>`;
 }
 
-function renderAgendaSection(title, items, therapyId) {
+function renderAgendaSection(section, therapyId, accordionId, isOpen = false) {
+    const { key, items, type } = section;
+    const borderClass = {
+        today: 'border-warning',
+        upcoming: 'border-success',
+        overdue: 'border-danger'
+    }[type] || 'border-secondary';
     const rows = items.length
         ? items.map((r) => {
             const statusBadge = renderReminderStatusBadge(r.status);
@@ -430,9 +509,12 @@ function renderAgendaSection(title, items, therapyId) {
             const doneButton = r.status === 'active'
                 ? `<button class=\"btn btn-sm btn-outline-success\" onclick=\"markReminderDone(${r.id}, ${therapyId})\">Segna fatto</button>`
                 : '';
+            const editButton = `<button class=\"btn btn-sm btn-outline-primary\" onclick=\"openReminderEdit(${r.id}, ${therapyId})\">Modifica</button>`;
+            const deleteButton = `<button class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteReminder(${r.id}, ${therapyId})\">Elimina</button>`;
+            const actions = [doneButton, editButton, deleteButton].filter(Boolean).join('');
 
             return `
-            <div class="border rounded p-2 mb-2 jt-reminder-item">
+            <div class="border rounded p-2 mb-2 jt-reminder-item ${borderClass}" data-reminder-id="${sanitizeHtml(r.id)}">
                 <div class="d-flex justify-content-between align-items-start gap-2 jt-reminder-head">
                 <div class="jt-reminder-main">
                     <strong>${sanitizeHtml(r.title || '-')}</strong>
@@ -447,17 +529,27 @@ function renderAgendaSection(title, items, therapyId) {
 
                 ${r.description ? `<div class="jt-reminder-desc mt-1">${sanitizeHtml(r.description)}</div>` : ''}
 
-                ${doneButton ? `<div class="text-end mt-2 jt-reminder-actions">${doneButton}</div>` : ''}
+                ${actions ? `<div class="text-end mt-2 jt-reminder-actions d-flex justify-content-end gap-2">${actions}</div>` : ''}
             </div>
             `;
 
         }).join('')
         : '<div class="text-muted">Nessun promemoria</div>';
 
+    const count = items.length;
+    const sectionId = `${accordionId}-${type}`;
     return `
-        <div class="mb-3">
-            <h6 class="text-uppercase text-muted">${sanitizeHtml(title)}</h6>
-            ${rows}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="${sectionId}-heading">
+                <button class="accordion-button ${isOpen ? '' : 'collapsed'}" type="button" data-bs-toggle="collapse" data-bs-target="#${sectionId}-collapse" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${sectionId}-collapse">
+                    <span class="text-uppercase">${sanitizeHtml(key)} (${count})</span>
+                </button>
+            </h2>
+            <div id="${sectionId}-collapse" class="accordion-collapse collapse ${isOpen ? 'show' : ''}" aria-labelledby="${sectionId}-heading" data-bs-parent="#${accordionId}">
+                <div class="accordion-body">
+                    ${rows}
+                </div>
+            </div>
         </div>
     `;
 }
@@ -482,6 +574,63 @@ async function markReminderDone(reminderId, therapyId = null) {
     } catch (error) {
         console.error(error);
         showReminderToast('Errore di rete nel completamento del promemoria', 'error');
+    }
+}
+
+function openReminderEdit(reminderId, therapyId = null) {
+    const form = document.getElementById('reminderForm');
+    if (!form) return;
+    const reminder = reminderCache.get(String(reminderId));
+    if (!reminder) {
+        showReminderToast('Impossibile trovare i dati del promemoria.', 'error');
+        return;
+    }
+    if (therapyId) {
+        const select = document.getElementById('reminderTherapySelect');
+        if (select) {
+            select.value = String(therapyId);
+        }
+    }
+    form.reminder_id.value = reminder.id;
+    form.title.value = reminder.title || '';
+    form.description.value = reminder.description || '';
+    form.frequency.value = reminder.frequency || 'one_shot';
+    form.interval_value.value = reminder.interval_value || 1;
+    form.first_due_at.value = formatReminderDateTimeInput(reminder.first_due_at || reminder.next_due_at || '');
+    if (form.frequency.value === 'weekly') {
+        form.weekday.value = reminder.weekday || '1';
+    }
+    reminderFormState.editingId = reminder.id;
+    setReminderFormMode(form, true);
+    form.frequency.dispatchEvent(new Event('change'));
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function deleteReminder(reminderId, therapyId = null) {
+    if (!reminderId) return;
+    const confirmed = confirm('Eliminare il promemoria?');
+    if (!confirmed) return;
+    const targetTherapyId = therapyId || document.getElementById('reminderTherapySelect')?.value;
+
+    try {
+        const response = await fetch(`api/reminders.php?id=${reminderId}`, { method: 'DELETE' });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.success) {
+            showReminderToast(result?.message || result?.error || 'Errore nella cancellazione del promemoria', 'error');
+            return;
+        }
+        showReminderToast('Promemoria eliminato', 'success');
+        reminderCache.delete(String(reminderId));
+        const item = document.querySelector(`.jt-reminder-item[data-reminder-id="${reminderId}"]`);
+        if (item) {
+            item.remove();
+        }
+        if (!document.querySelector('.jt-reminder-item')) {
+            loadReminders(targetTherapyId);
+        }
+    } catch (error) {
+        console.error(error);
+        showReminderToast('Errore di rete nella cancellazione del promemoria', 'error');
     }
 }
 
@@ -1423,6 +1572,11 @@ async function openRemindersModal(therapyId = null) {
                         </div>
                         <div id="reminderList" class="mb-3"></div>
                         <form id="reminderForm" class="row g-3">
+                            <div class="col-12 d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0" id="reminderFormTitle">Nuovo promemoria</h6>
+                                <button type="button" class="btn btn-link btn-sm text-decoration-none d-none" id="reminderFormReset">Annulla modifica</button>
+                            </div>
+                            <input type="hidden" name="reminder_id" value="">
                             <div class="col-md-6">
                                 <label class="form-label">Titolo</label>
                                 <input type="text" class="form-control" name="title" required>
@@ -1439,6 +1593,10 @@ async function openRemindersModal(therapyId = null) {
                                     <option value="biweekly">Bisettimanale</option>
                                     <option value="monthly">Mensile</option>
                                 </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Intervallo</label>
+                                <input type="number" class="form-control" name="interval_value" min="1" value="1">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Data iniziale</label>

@@ -626,17 +626,29 @@ switch ($method) {
                         $pdo->rollBack();
                         respond(false, null, 'Paziente non trovato per la farmacia', 404);
                     }
+                    $existingPatientRow = db_fetch_one(
+                        "SELECT first_name, last_name, birth_date, codice_fiscale, gender, phone, email, notes FROM jta_patients WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
+                        [$patient_id, $pharmacy_id]
+                    ) ?: [];
+                    $firstNamePayload = array_key_exists('first_name', $patient) ? ($patient['first_name'] ?? '') : ($existingPatientRow['first_name'] ?? '');
+                    $lastNamePayload = array_key_exists('last_name', $patient) ? ($patient['last_name'] ?? '') : ($existingPatientRow['last_name'] ?? '');
+                    $birthDatePayload = array_key_exists('birth_date', $patient) ? ($patient['birth_date'] ?? null) : ($existingPatientRow['birth_date'] ?? null);
+                    $cfPayload = array_key_exists('codice_fiscale', $patient) ? ($patient['codice_fiscale'] ?? null) : ($existingPatientRow['codice_fiscale'] ?? null);
+                    $genderPayload = array_key_exists('gender', $patient) ? ($patient['gender'] ?? null) : ($existingPatientRow['gender'] ?? null);
+                    $phonePayload = array_key_exists('phone', $patient) ? ($patient['phone'] ?? null) : ($existingPatientRow['phone'] ?? null);
+                    $emailPayload = array_key_exists('email', $patient) ? ($patient['email'] ?? null) : ($existingPatientRow['email'] ?? null);
+                    $notesPayload = array_key_exists('notes', $patient) ? ($patient['notes'] ?? null) : ($existingPatientRow['notes'] ?? null);
                     executeQueryWithTypes($pdo,
                         "UPDATE jta_patients SET first_name = ?, last_name = ?, birth_date = ?, codice_fiscale = ?, gender = ?, phone = ?, email = ?, notes = ? WHERE id = ? AND (pharmacy_id = ? OR pharmacy_id IS NULL)",
                         [
-                            $patient['first_name'] ?? '',
-                            $patient['last_name'] ?? '',
-                            $patient['birth_date'] ?? null,
-                            $patient['codice_fiscale'] ?? null,
-                            $patient['gender'] ?? null,
-                            $patient['phone'] ?? null,
-                            $patient['email'] ?? null,
-                            $patient['notes'] ?? null,
+                            $firstNamePayload,
+                            $lastNamePayload,
+                            $birthDatePayload,
+                            $cfPayload,
+                            $genderPayload,
+                            $phonePayload,
+                            $emailPayload,
+                            $notesPayload,
                             $patient_id,
                             $pharmacy_id
                         ]

@@ -95,13 +95,30 @@ function formatSignatureImage($value) {
     return 'data:' . $mime . ';base64,' . $payload;
 }
 
+function hasScope($scopes, $key) {
+    if (!$scopes) {
+        return false;
+    }
+    if (is_array($scopes) && array_values($scopes) === $scopes) {
+        return in_array($key, $scopes, true);
+    }
+    return !empty($scopes[$key]);
+}
+
+function checkboxSymbol($checked) {
+    $symbol = $checked ? '&#x2611;' : '&#x2610;';
+    $fallback = $checked ? '[X]' : '[ ]';
+    return '<span class="checkbox-symbol">' . $symbol . '</span><span class="checkbox-fallback">' . $fallback . '</span>';
+}
+
 $pharmacy = $reportData['pharmacy'] ?? [];
 $pharmacist = $reportData['pharmacist'] ?? [];
 $patient = $reportData['patient'] ?? [];
 $therapy = $reportData['therapy'] ?? [];
 $chronic = $reportData['chronic_care'] ?? [];
-$survey = $reportData['survey_base']['answers'] ?? [];
 $consents = $reportData['consents'] ?? [];
+$caregivers = $reportData['caregivers'] ?? [];
+$consentData = $reportData['chronic_care']['consent'] ?? [];
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -115,7 +132,13 @@ $consents = $reportData['consents'] ?? [];
         table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 8px; }
         table th, table td { border: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
         .muted { color: #777; }
-        .signature { max-width: 240px; max-height: 120px; }
+        .consent-check { margin-bottom: 6px; }
+        .checkbox-symbol { font-family: DejaVu Sans, Arial, sans-serif; margin-right: 6px; }
+        .checkbox-fallback { display: none; font-family: Arial, sans-serif; font-size: 11px; margin-left: 4px; }
+        .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; }
+        .signature-table td { border: none; padding: 0 6px; text-align: center; vertical-align: bottom; }
+        .signature-line { border-top: 1px solid #333; margin: 12px 8px 6px; }
+        .signature-image { max-width: 100%; max-height: 90px; margin-bottom: 6px; }
         ul { padding-left: 16px; margin: 6px 0; }
     </style>
 </head>
@@ -147,6 +170,28 @@ $consents = $reportData['consents'] ?? [];
     </div>
 
     <div class="section">
+        <h2>Caregiver / Familiare</h2>
+        <?php if ($caregivers && is_array($caregivers) && count($caregivers)): ?>
+            <table>
+                <thead>
+                    <tr><th>Nome</th><th>Relazione</th><th>Contatti</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach ($caregivers as $caregiver): ?>
+                    <tr>
+                        <td><?= e(trim(($caregiver['first_name'] ?? '') . ' ' . ($caregiver['last_name'] ?? ''))) ?></td>
+                        <td><?= e($caregiver['relation_to_patient'] ?? $caregiver['role'] ?? '-') ?></td>
+                        <td>Email: <?= e($caregiver['email'] ?? '-') ?> | Telefono: <?= e($caregiver['phone'] ?? '-') ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
+            <p class="muted">Nessun caregiver o familiare indicato.</p>
+        <?php endif; ?>
+    </div>
+
+    <div class="section">
         <h2>Terapia</h2>
         <table>
             <tr><th>Titolo</th><td><?= e($therapy['title'] ?? '-') ?></td></tr>
@@ -157,57 +202,71 @@ $consents = $reportData['consents'] ?? [];
     </div>
 
     <div class="section">
-        <h2>Anamnesi e dati clinici</h2>
+        <h2>Condizione primaria</h2>
         <table>
             <tr><th>Condizione primaria</th><td><?= e($chronic['condition'] ?? '-') ?></td></tr>
-            <tr><th>Anamnesi generale</th><td><?= renderKeyValue($chronic['general_anamnesis'] ?? []) ?></td></tr>
-            <tr><th>Intake</th><td><?= renderKeyValue($chronic['detailed_intake'] ?? []) ?></td></tr>
-            <tr><th>Adherence base</th><td><?= renderKeyValue($chronic['adherence_base'] ?? []) ?></td></tr>
             <tr><th>Note iniziali</th><td><?= e($chronic['notes_initial'] ?? '-') ?></td></tr>
-            <tr><th>Rischio</th><td><?= e($chronic['risk_score'] ?? '-') ?></td></tr>
+            <tr><th>Data follow-up</th><td><?= e(formatRomeDate($chronic['follow_up_date'] ?? null)) ?></td></tr>
         </table>
     </div>
 
     <div class="section">
-        <h2>Survey condition</h2>
-        <?php if ($survey && is_array($survey) && count($survey)): ?>
-            <table>
-                <thead>
-                    <tr><th>Domanda</th><th>Risposta</th></tr>
-                </thead>
-                <tbody>
-                <?php foreach ($survey as $question => $answer): ?>
-                    <tr>
-                        <td><?= e($question) ?></td>
-                        <td><?= e(formatAnswer($answer)) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php else: ?>
-            <p class="muted">Nessuna survey base disponibile.</p>
-        <?php endif; ?>
-    </div>
-
-    <div class="section">
         <h2>Consensi</h2>
-        <?php if ($consents && is_array($consents) && count($consents)): ?>
-            <?php foreach ($consents as $consent): ?>
-                <div class="section">
-                    <p><strong><?= e($consent['consent_text'] ?? 'Consenso') ?></strong></p>
-                    <p>Firmatario: <?= e($consent['signer_name'] ?? '-') ?> (<?= e($consent['signer_relation'] ?? $consent['signer_role'] ?? '-') ?>)</p>
-                    <p>Data: <?= e(formatRomeDate($consent['signed_at'] ?? null, 'd/m/Y H:i')) ?></p>
-                    <?php $signatureImage = formatSignatureImage($consent['signature_image'] ?? null); ?>
+        <?php
+            $scopes = is_array($consentData) ? ($consentData['scopes'] ?? []) : [];
+            $place = is_array($consentData) ? ($consentData['place'] ?? null) : null;
+            $signedAt = is_array($consentData) ? ($consentData['signed_at'] ?? null) : null;
+            $pharmacistName = is_array($consentData) ? ($consentData['pharmacist_name'] ?? null) : null;
+            $consentSigner = is_array($consentData) ? ($consentData['signer_name'] ?? null) : null;
+            $patientName = trim(($patient['first_name'] ?? '') . ' ' . ($patient['last_name'] ?? ''));
+            $caregiverName = '';
+            if ($caregivers && is_array($caregivers) && count($caregivers)) {
+                $caregiverName = trim(($caregivers[0]['first_name'] ?? '') . ' ' . ($caregivers[0]['last_name'] ?? ''));
+            }
+            $signatureImage = null;
+            if (is_array($consentData) && !empty($consentData['signature_image'])) {
+                $signatureImage = formatSignatureImage($consentData['signature_image']);
+            } elseif ($consents && is_array($consents) && count($consents)) {
+                $signatureImage = formatSignatureImage($consents[0]['signature_image'] ?? null);
+            }
+            $patientLabel = $consentSigner ?: $patientName;
+            $caregiverLabel = $caregiverName ?: 'Caregiver/Familiare';
+            $pharmacistLabel = $pharmacistName ?: ($pharmacist['name'] ?? '-');
+        ?>
+        <p><strong>Consenso informato e trattamento dati</strong></p>
+        <div class="consent-check">
+            <?= checkboxSymbol(hasScope($scopes, 'care_followup')) ?>
+            Acconsento all'avvio del percorso di aderenza terapeutica e alle attività di cura, monitoraggio e follow-up.
+        </div>
+        <div class="consent-check">
+            <?= checkboxSymbol(hasScope($scopes, 'contact_for_reminders')) ?>
+            Acconsento al trattamento dei dati personali e al contatto da parte della farmacia per comunicazioni legate alla terapia.
+        </div>
+        <div class="consent-check">
+            <?= checkboxSymbol(hasScope($scopes, 'anonymous_stats')) ?>
+            Acconsento all'utilizzo dei dati in forma anonima per finalità statistiche e miglioramento del servizio.
+        </div>
+        <p>Luogo: <?= e($place ?? '-') ?> | Data: <?= e(formatRomeDate($signedAt ?? null)) ?></p>
+        <p>Farmacista: <?= e($pharmacistLabel) ?></p>
+        <table class="signature-table">
+            <tr>
+                <td>
                     <?php if ($signatureImage): ?>
-                        <div><img class="signature" src="<?= e($signatureImage) ?>" alt="Firma"></div>
-                    <?php else: ?>
-                        <p class="muted">Firma non disponibile.</p>
+                        <div><img class="signature-image" src="<?= e($signatureImage) ?>" alt="Firma"></div>
                     <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <p class="muted">Nessun consenso registrato.</p>
-        <?php endif; ?>
+                    <div class="signature-line"></div>
+                    Firma Paziente<?= $patientLabel ? ': ' . e($patientLabel) : '' ?>
+                </td>
+                <td>
+                    <div class="signature-line"></div>
+                    Firma <?= e($caregiverLabel) ?>
+                </td>
+                <td>
+                    <div class="signature-line"></div>
+                    Firma <?= e($pharmacistLabel) ?>
+                </td>
+            </tr>
+        </table>
     </div>
 
     <p class="muted">Documento generato automaticamente dal sistema.</p>

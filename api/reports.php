@@ -66,7 +66,7 @@ function loadTherapyReportData($therapy_id, $pharmacy_id) {
         $therapy = db_fetch_one(
             "SELECT t.*, p.first_name AS patient_first_name, p.last_name AS patient_last_name, p.codice_fiscale, p.birth_date, p.phone, p.email,
                     ph.nice_name AS pharmacy_name, ph.business_name, ph.address AS pharmacy_address, ph.city AS pharmacy_city, ph.email AS pharmacy_email, ph.phone_number AS pharmacy_phone,
-                    tcc.primary_condition, tcc.general_anamnesis, tcc.detailed_intake, tcc.adherence_base, tcc.risk_score AS chronic_risk_score, tcc.flags, tcc.notes_initial, tcc.follow_up_date AS chronic_follow_up_date
+                    tcc.primary_condition, tcc.general_anamnesis, tcc.detailed_intake, tcc.adherence_base, tcc.risk_score AS chronic_risk_score, tcc.flags, tcc.notes_initial, tcc.follow_up_date AS chronic_follow_up_date, tcc.consent
              FROM jta_therapies t
              JOIN jta_patients p ON t.patient_id = p.id
              JOIN jta_pharmas ph ON t.pharmacy_id = ph.id
@@ -101,7 +101,8 @@ function loadTherapyReportData($therapy_id, $pharmacy_id) {
         'risk_score' => $therapy['chronic_risk_score'] ?? null,
         'flags' => $therapy['flags'] ? json_decode($therapy['flags'], true) : null,
         'notes_initial' => $therapy['notes_initial'] ?? null,
-        'follow_up_date' => $therapy['chronic_follow_up_date'] ?? null
+        'follow_up_date' => $therapy['chronic_follow_up_date'] ?? null,
+        'consent' => $therapy['consent'] ? json_decode($therapy['consent'], true) : null
     ];
 
     return [
@@ -406,6 +407,7 @@ function buildTherapySummaryContent($therapy_id, $pharmacy_id)
     $therapy = $therapyData['therapy'];
     $pharmacist = getPharmacistInfo();
     $consents = fetchTherapyConsents($therapy_id);
+    $caregivers = fetchCaregiversForReport($therapy_id);
 
     return [
         'generated_at' => date('Y-m-d H:i'),
@@ -427,6 +429,7 @@ function buildTherapySummaryContent($therapy_id, $pharmacy_id)
             'phone' => $therapy['phone'] ?? null,
             'email' => $therapy['email'] ?? null
         ],
+        'caregivers' => $caregivers,
         'therapy' => [
             'id' => $therapy['id'],
             'title' => $therapy['therapy_title'] ?? null,

@@ -924,9 +924,6 @@ async function openCheckModal({ therapyId = null } = {}) {
                                 </div>
                             </div>
                             <div id="checkQuestionList" class="mb-3"></div>
-                            <div class="text-end">
-                                <button class="btn btn-primary" type="button" onclick="saveAnswers()">Salva risposte</button>
-                            </div>
                         </div>
                         <div class="mt-4 border rounded p-3" id="checkMetaSection">
                             <h6>Dati check periodico</h6>
@@ -945,7 +942,7 @@ async function openCheckModal({ therapyId = null } = {}) {
                                 </div>
                             </div>
                             <div class="text-end mt-3">
-                                <button class="btn btn-primary" type="button" id="btnSaveCheckMeta">Salva dati check</button>
+                                <button class="btn btn-primary" type="button" id="btnSaveCheck">Salva</button>
                             </div>
                         </div>
                         <div class="mt-4">
@@ -982,9 +979,9 @@ async function openCheckModal({ therapyId = null } = {}) {
     if (btnNewCheck) {
         btnNewCheck.addEventListener('click', () => createCheckPeriodico());
     }
-    const btnSaveCheckMeta = document.getElementById('btnSaveCheckMeta');
-    if (btnSaveCheckMeta) {
-        btnSaveCheckMeta.addEventListener('click', () => saveCheckMeta());
+    const btnSaveCheck = document.getElementById('btnSaveCheck');
+    if (btnSaveCheck) {
+        btnSaveCheck.addEventListener('click', () => saveCheck());
     }
 
     const modal = new bootstrap.Modal(document.getElementById('checkPeriodicoModalDialog'));
@@ -1369,11 +1366,17 @@ async function moveChecklistQuestion(index, direction) {
     }
 }
 
-async function saveAnswers() {
+async function saveCheck() {
     if (!activeFollowupId) {
         alert('Nessun check selezionato.');
         return;
     }
+    const therapyId = document.getElementById('checkTherapySelect')?.value;
+    if (!therapyId) {
+        alert('Seleziona una terapia.');
+        return;
+    }
+
     const inputs = document.querySelectorAll('.check-question-input');
     const answersToSend = [];
     let hasProvidedAnswer = false;
@@ -1407,100 +1410,78 @@ async function saveAnswers() {
         }
     });
 
-    if (!answersToSend.length) {
-        showFollowupToast('Nessuna risposta selezionata', 'warning');
-        return;
-    }
-
-    try {
-        const response = await fetch(`api/followups.php?action=check-answers&id=${activeFollowupId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers: answersToSend })
-        });
-        if (!response.ok) {
-            const payload = await response.json().catch(() => null);
-            if (response.status === 422 && payload?.error === 'Nessuna risposta inviata') {
-                showFollowupToast('Nessuna risposta selezionata', 'warning');
-                return;
-            }
-            alert(payload?.error || 'Errore nel salvataggio delle risposte');
-            return;
-        }
-        const result = await response.json();
-        if (result.success) {
-            const returnedAnswers = result.data?.answers || {};
-            if (!Object.keys(returnedAnswers).length) {
-                if (hasProvidedAnswer) {
-                    console.error('Risposte checklist vuote dopo salvataggio', result);
-                    alert('Errore: risposte non salvate correttamente. Riprova.');
-                    return;
-                }
-            }
-            if (Object.keys(returnedAnswers).length) {
-                activeChecklistAnswers = returnedAnswers;
-            } else if (!hasClearOnly) {
-                showFollowupToast('Nessuna risposta selezionata', 'warning');
-                return;
-            }
-            renderCheckQuestions();
-            const therapyId = document.getElementById('checkTherapySelect')?.value;
-            loadCheckFollowups(therapyId);
-            showFollowupToast('Risposte salvate', 'success');
-        } else {
-            alert(result.error || 'Errore nel salvataggio delle risposte');
-        }
-    } catch (error) {
-        console.error(error);
-        alert('Errore di rete nel salvataggio delle risposte');
-    }
-}
-
-async function saveCheckMeta() {
-    if (!activeFollowupId) {
-        alert('Nessun check selezionato.');
-        return;
-    }
     const riskInput = document.getElementById('checkRiskScore');
     const dateInput = document.getElementById('checkFollowUpDate');
     const notesInput = document.getElementById('checkPharmacistNotes');
     if (!riskInput || !dateInput || !notesInput) return;
 
-    const payload = {};
-    if (riskInput.value !== '') {
-        payload.risk_score = Number(riskInput.value);
-    }
-    if (dateInput.value) {
-        payload.follow_up_date = dateInput.value;
-    }
-    if (notesInput.value) {
-        payload.pharmacist_notes = notesInput.value;
-    }
-    if (!Object.keys(payload).length) {
-        alert('Inserisci almeno un dato da aggiornare.');
+    const riskScore = riskInput.value !== '' ? Number(riskInput.value) : null;
+    const followUpDate = dateInput.value ? dateInput.value : null;
+    const pharmacistNotes = notesInput.value ? notesInput.value : null;
+    const metaChanged =
+        String(riskScore ?? '') !== String(activeFollowupData?.risk_score ?? '') ||
+        String(followUpDate ?? '') !== String(activeFollowupData?.follow_up_date ?? '') ||
+        String(pharmacistNotes ?? '') !== String(activeFollowupData?.pharmacist_notes ?? '');
+
+    if (!answersToSend.length && !metaChanged) {
+        showFollowupToast('Nessun aggiornamento da salvare', 'warning');
         return;
     }
 
     try {
-        const response = await fetch(`api/followups.php?action=check-meta&id=${activeFollowupId}`, {
+        const response = await fetch('api/followups.php?action=save-check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                therapy_id: Number(therapyId),
+                followup_id: Number(activeFollowupId),
+                check_type: activeFollowupData?.check_type ?? null,
+                risk_score: riskScore,
+                follow_up_date: followUpDate,
+                pharmacist_notes: pharmacistNotes,
+                answers: answersToSend,
+                client_timestamp: new Date().toISOString()
+            })
         });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            alert(payload?.error || 'Errore nel salvataggio del check');
+            return;
+        }
         const result = await response.json();
         if (result.success) {
             activeFollowupData = result.data?.followup || activeFollowupData;
+            if (result.data?.answers) {
+                activeChecklistAnswers = result.data?.answers || activeChecklistAnswers;
+            } else if (!hasClearOnly && hasProvidedAnswer) {
+                console.error('Risposte checklist vuote dopo salvataggio', result);
+                alert('Errore: risposte non salvate correttamente. Riprova.');
+                return;
+            }
             renderCheckMetaForm(activeFollowupData);
+            renderCheckQuestions();
             const therapyId = document.getElementById('checkTherapySelect')?.value;
             loadCheckFollowups(therapyId);
-            showFollowupToast('Dati check aggiornati', 'success');
+            refreshReportPreviewIfOpen();
+            showFollowupToast('Check salvato', 'success');
         } else {
-            alert(result.error || 'Errore nel salvataggio dati check');
+            alert(result.error || 'Errore nel salvataggio del check');
         }
     } catch (error) {
         console.error(error);
-        alert('Errore di rete nel salvataggio dati check');
+        alert('Errore di rete nel salvataggio del check');
     }
+}
+
+function refreshReportPreviewIfOpen() {
+    const modalEl = document.getElementById('reportModalDialog');
+    if (!modalEl || !modalEl.classList.contains('show')) return;
+    const therapySelect = document.getElementById('reportTherapySelect');
+    const followupSelect = document.getElementById('reportFollowupSelect');
+    const previewContainer = document.getElementById('reportPreview');
+    const generatePdfBtn = document.getElementById('reportGeneratePdf');
+    if (!therapySelect || !previewContainer) return;
+    handleReportPreview(therapySelect, followupSelect, previewContainer, generatePdfBtn);
 }
 
 function showFollowupToast(message, type = 'success') {
